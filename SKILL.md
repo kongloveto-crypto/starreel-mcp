@@ -1790,7 +1790,8 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   transitions by hand. In order: ① if portraits / turnarounds / scene images /
   frames changed in this episode, `get_stale_portrait_frames(episode_id)` lists
   shots whose in-use frames still rest on old assets, and
-  `get_asset_versions(storyboard_id)` shows which version a shot uses (both free;
+  `get_asset_versions(storyboard_id)` shows which version a shot uses — read the top-level
+  `in_use` (per slot id + url), never "the first item" of `versions` (both free;
   `unknown` ≠ stale; regenerating is paid — the customer decides);
   ② `scan_intra_shot_cuts(episode_id)`; ③ per shot `recommend_trim_window`
   (frozen tail, effective action window; scene-group shots return
@@ -1812,7 +1813,7 @@ Full reference: https://api.shortreelai.com/docs/mcp
 
 - `get_storyboards.asset_versions` 对首帧、尾帧和视频分别返回四项事实：`generated`（已生成）、`input_consistent`（与当前输入一致）、`review_valid`（审核有效）、`adopted`（已采用）。`null` 表示证据不足，不能当作 true。
 - `ready` 和生成数量只表示产物存在；当前有效数量使用 `get_pipeline_status.asset_versions_summary.*.current_effective`。出图、出视频两步的 `status=done` 同样只表示已生成，旁边的 `validity` 拆出当前有效、生成后输入已变（`changed_by` 给出是哪类依赖变了）、无法判断、未审核、审核未过；`validity.note` 非空时先告知客户，再决定重出哪些镜，不要因输入变更就整集重出。`validity.review_advised`（汇总里同样单列 `review_advised`，`stale` 不含它）是「只有角色外观文本被改写」的产物：画面身份由定妆图锚定，多半只是换了写法，请客户对照定妆图确认，不当作需重出；`review_advised_by` 按角色列出。换帧后旧视频仍可查看，但失效版本不能混入当前有效汇总。
-- `get_asset_versions(storyboard_id)` 查看历史版本链接、依赖 ID/版本哈希及各自状态。历史没有快照时不从当前绑定伪造依赖。
+- `get_asset_versions(storyboard_id)` 查看历史版本链接、依赖 ID/版本哈希及各自状态。历史没有快照时不从当前绑定伪造依赖。要在用那版读顶层 `in_use`（每个槽位给 id 与 url），别取 `versions` 的第一条。
 - `get_image_dispatch(image_id)` 查一张镜头帧的派发台账：每张参考图的用途、所属角色、是否送达模型，派发前被剔的图在哪一步因什么被剔（如时代预检点名的冲突物件），以及最终发给模型的提示词。画面「不像某角色/少了某道具」时先查它，确认是参考没送到还是模型没画对，再决定改什么；`ledger` 不是 `full` 时缺失项为 `null`，不能当作已送达。
 - `get_frame_candidates(storyboard_id)` 一镜首帧/尾帧的全部候选（含被拒的原图）：`adopted` 标出当前在用那张；`reject.class` 区分要改内容（`needs_content_fix`）、内容问题但可重掷（`content_retryable`）、审核没审成或偶发（`transient`，不是画面不合格）；`audit.warnings` / `expected` / `derived_shot_type` / `boxes` 是审计证据（老候选为 `null`，不代表审过）。镜头反复被拒或客户问「被拒的长什么样」时先逐张看它，再决定改分镜、改参考还是重掷。
 - `adopt_frame_candidate(storyboard_id, generation_id, frame_type)` 客户看过原图、确认是审计误判后，人工采用一张已出完的候选（被拒 / 落选 / 曾经在用）作为在用帧（免费），可随时换回之前那张。必须客户明确同意才调，别为了让流程走下去自行放行；已有视频的镜会标待重生，上传/定稿帧要带 `replace_user_frame:true`。

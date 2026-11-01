@@ -962,7 +962,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'get_asset_versions',
     '只读查询一个镜头的全部图片/视频版本、历史查看链接、依赖 ID 与版本哈希，以及已生成→与当前输入一致→审核有效→已采用四项独立事实。历史缺少依赖记录时显示未知，不补造快照。免费。' +
-      'video_lock 是客户锁定的已验收视频(lock_shot_video):locked=true 时这条按沿用算有效,frames_changed_since_lock=true 表示锁定后帧又改过但不需要重出。',
+      'video_lock 是客户锁定的已验收视频(lock_shot_video):locked=true 时这条按沿用算有效,frames_changed_since_lock=true 表示锁定后帧又改过但不需要重出。' +
+      '★要镜头当前在用的那版直接读顶层 in_use(first_frame / last_frame / video 各给 id 与 url,没有为 null);versions 已按槽位分组、在用版本排在本组第一并标 in_use=true,别按「列表第一个」或创建时间猜在用版本。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) => jsonResult(await client.produceGet(`/storyboards/${storyboard_id}/asset-versions`)),
   )
