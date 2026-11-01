@@ -1343,6 +1343,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '判定用的就是平台出视频时那套判据,你自己是猜不出来的,所以出完首帧务必调一次。' +
       '返回 shots_needing_last_frame(总数)、ready(已有首帧、现在就能补尾帧的镜)、' +
       'pending_first_frame(还需要尾帧但首帧尚未落地的镜——等首帧出完再调一次本工具)。' +
+      '★只列**出视频时送得到**的尾帧(与 quote_videos 的 frame_delivery 同一判据):场景组内镜(group_unit)、续拍镜、' +
+      '下游会把尾帧换成首帧的镜(static_shot_last_eq_first)等送不到的,不进 ready/pending、批量出尾帧不派发不计价,' +
+      '单列在 not_delivered(带 reason/message)。少数送不到但保留的镜(客户显式要过独立尾帧、或运镜镜要它给下一镜当接缝锚)' +
+      '仍在 ready/pending 里,但标 tail_delivered=false——此镜尾帧不会送达视频,先跟客户说清再出。' +
       '拿到 ready 清单后:quote_frames + generate_frames 带 frame_type=last_frame 即可批量补。' +
       '★尾帧补完(或本工具报 0)之后的下一步是接缝:chain_frames(dry_run:true) 看计划与预估、客户确认后执行,再 review_frames。' +
       '★跳过尾帧不会报错,但那些镜出视频时只有首帧一个锚,末态由模型自由发挥——' +
@@ -1379,6 +1383,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '(平台的兜底补图只惠及同场景后续镜),背景从首镜起就开始漂。' +
       '用 get_pipeline_status 的 generate_scene_images 步核对 completed/total。' +
       'frame_type 要与 quote_frames 用的一致(默认 first_frame)。' +
+      'frame_type=last_frame / both 只给 tail_frame_plan 列出的镜出尾帧:出视频时送不到的尾帧(组内镜等,见 tail_frame_plan 的 not_delivered)不派发、不扣费。' +
       '★这是**批量补缺帧**:只给「缺该帧」的镜出图,已有首帧的镜会跳过——这是正常设计、不是"系统拒绝重出"。' +
       '要**重出/重画某一镜已有的帧**(如换了定妆图要让新图生效),用 generate_shot_frame(单镜重生,平台带身份锚),不是这个工具、更不是自制图 upload_shot_frame。' +
       '★**本工具默认只出首帧,出帧是两趟**:首帧出完必须调一次免费的 tail_frame_plan——它按平台自己的判据告出哪几镜需要独立尾帧' +

@@ -749,7 +749,7 @@ export const ACTION_FILM = {
     '`create_drama`(+ `update_project_settings` style / `set_era_contract`)→ `set_script`(动作梗概)→ `rewrite_script` → `get_run_status` 到结束 → `review_script` → `extract_assets`(带 token)→ `get_run_status` 到结束 → `get_scenes` 核对场景 → ' +
     '`check_storyboard_table` → `import_storyboard_table` → `get_autofill_status` 到 done → `update_shot`(首帧起势等)→ `review_storyboards` → ' +
     '`generate_portraits_and_sheets`(第一次只派定妆图)→ `get_characters` 轮询到定妆图 ready → 再调一次 `generate_portraits_and_sheets` 出设定图 → 轮询到 sheet ready;基板 `quote_scene_images` → `generate_scene_images`;`generate_color_script` → `quote_frames` → `generate_frames`(首帧,带分镜 token)→ `get_storyboards` 轮询到首帧全部 ready(出图是异步的)→ ' +
-    '`get_scene_group_plan` × `tail_frame_plan` 取交集(只留单独生成、又需要尾帧的镜)→ `update_shot`(last_frame_prompt)→ `review_storyboards`(复审拿新 token)→ 逐镜 `quote_shot_frame` → `generate_shot_frame`(frame_type=last_frame;别用批量 `generate_frames` 出尾帧,它不看分组,会连组内镜一起出、白扣费)→ `get_storyboards` 轮询到尾帧全部落地(还在生成时审查,拿到的 token 会在图落地后失效)→ ' +
+    '`tail_frame_plan`(已剔除组内镜等出视频时尾帧送不到的镜,见 not_delivered)→ `update_shot`(last_frame_prompt)→ `review_storyboards`(复审拿新 token)→ 逐镜 `quote_shot_frame` → `generate_shot_frame`(frame_type=last_frame;要批量也可 `quote_frames`+`generate_frames` 带 frame_type=last_frame,只出 tail_frame_plan 列出的镜)→ `get_storyboards` 轮询到尾帧全部落地(还在生成时审查,拿到的 token 会在图落地后失效)→ ' +
     '`review_frames`(★出视频前必过,拿帧层 token)→ `quote_videos` → `generate_videos`(带帧层 token)→ `get_storyboards` 轮询到全部 video_status=ready → `scan_intra_shot_cuts` → `trim_shot` 剪拖沓尾段 → `compose_episode` → `get_final_cut`。' +
     '任何一步之后改了镜,下一个收费步之前都要把对应的 review_* 再跑一次。',
   shot_design: [
@@ -769,7 +769,7 @@ export const ACTION_FILM = {
   continuity: [
     '相邻的连续动作镜会被自动并成**一组**一次生成(场景组),组内时长会按内容重分:实测 6 秒 + 5 秒两镜生成后变成约 8 秒 + 3.7 秒。这是好事——组内动作衔接最顺——但别拿报价时的秒数去卡剪辑点;出视频前用 `get_scene_group_plan` 看分组。',
     '★尾帧只对**单独生成**的镜有用:先看 `get_scene_group_plan`——被并进组的镜,组视频只送组首镜首帧(唯一例外是 seedance-2.5 的关键帧组),给它出的尾帧根本不会送到视频模型,出了白扣费(实测那次就有一张尾帧落在组内、没被用上)。某镜确实需要终态锚,就让它单独出:`update_shot` 给该镜设 video_engine(设了引擎的镜不进场景组,代价是失去与相邻镜一次成片的连贯),否则接受组内由模型自由衔接、不出尾帧。' +
-      '单独生成的镜:首帧出完必调 `tail_frame_plan`:冲刺类「从 A 点到 B 点」的镜会被判为状态改变、需要独立尾帧。出尾帧前先看 `get_storyboards` 的 terminal_desc_missing,为 true 的镜用 `update_shot` 写 last_frame_prompt(结束时人在哪、什么姿态、身后留下什么痕迹),否则尾帧大概率被终态闸拒且照常扣费。写完**再跑一次 `review_storyboards`**,用新 token 逐镜 `quote_shot_frame` → `generate_shot_frame`(frame_type=last_frame)出尾帧——改镜会让出首帧时那个 token 失效;批量 `generate_frames` 出尾帧不看分组,剧里有组内状态改变镜时会一并出、白扣费。报价一次只能用一次,出首帧用掉的 quote_id 不能再拿来出尾帧。首尾帧都出齐后跑 `review_frames`,用它的 token 才能 `generate_videos`(分镜层 token 只放行出帧)。',
+      '单独生成的镜:首帧出完必调 `tail_frame_plan`:冲刺类「从 A 点到 B 点」的镜会被判为状态改变、需要独立尾帧。出尾帧前先看 `get_storyboards` 的 terminal_desc_missing,为 true 的镜用 `update_shot` 写 last_frame_prompt(结束时人在哪、什么姿态、身后留下什么痕迹),否则尾帧大概率被终态闸拒且照常扣费。写完**再跑一次 `review_storyboards`**,用新 token 逐镜 `quote_shot_frame` → `generate_shot_frame`(frame_type=last_frame)出尾帧——改镜会让出首帧时那个 token 失效;组内镜的尾帧出视频时送不到,`tail_frame_plan` 与批量出尾帧都已剔除(见 not_delivered)。报价一次只能用一次,出首帧用掉的 quote_id 不能再拿来出尾帧。首尾帧都出齐后跑 `review_frames`,用它的 token 才能 `generate_videos`(分镜层 token 只放行出帧)。',
     '出完视频用 `scan_intra_shot_cuts` 查镜内乱切;瞬移类的闪切是有意的,别当成故障去重生。',
   ],
   engines:
