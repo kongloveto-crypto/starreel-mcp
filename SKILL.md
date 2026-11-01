@@ -1661,6 +1661,15 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   own fade-in/out and start time), a full-screen black closing card (`backdrop: "black"`) and
   scrolling end credits (`motion: "scroll_up"`). Cards stay out of the dialogue-subtitle band.
   Use only the text the customer supplied. Don't overlay text on a downloaded cut.
+  `font_size` is a **cap** in output pixels (a 1080×1920 cut counts 1080 wide, not a 720p base);
+  horizontal cards size to the widest line (CJK = 1 em, Latin letters ≈ 0.6 em), so one very long
+  English line shrinks the whole card — break it into shorter lines instead of raising the cap.
+- **End poster cards** (end logo / key visual / QR + one CTA line after the last shot; free;
+  `compose_episode` again): `get_episode_poster_card` → `set_episode_poster_card` (full overwrite,
+  up to 5, `[]` clears; upload the image with `upload_image` first). Invalid fields are a 400, not
+  silently dropped. Drama-wide default: `update_project_settings` `poster_card_default` (a JSON
+  string, same fields). Don't build an end logo from a narration-card shot + `upload_shot_footage`
+  — narration-card shots ignore footage and the upload is rejected (`narration_card_no_footage`).
 - **Finish**: `compose_episode`, `get_final_cut`, `get_export`,
   `generate_episode_poster`, `generate_cover`
 - **What did this drama cost?** `get_drama_bill` — per kind `charged` / `refunded`

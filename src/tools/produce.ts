@@ -490,8 +490,8 @@ const PROJECT_SETTINGS_FIELDS = {
   default_transition_ms: z.number().optional().describe('转场时长 ms(默认 250;短剧 200-400 体感佳)'),
   reframe_mode: z.string().optional().describe('一源多画幅裁切策略'),
   reframe_anchor: z.string().optional().describe('多画幅裁切锚点'),
-  cover_card_default: z.string().optional().describe('片头封面卡默认'),
-  poster_card_default: z.string().optional().describe('片尾海报卡默认'),
+  cover_card_default: z.string().optional().describe('片头封面卡剧级默认,值是 JSON 字符串,结构同 poster_card_default(拼在成片最前);传空串清空'),
+  poster_card_default: z.string().optional().describe('片尾海报卡剧级默认(各集没单独设时回退用它),值是 JSON 字符串:单个对象或数组(多张依次播放),每张 {imageUrl(必填·upload_image 返回的 https 地址或 static/ 路径),fit:"cover"铺满裁切|"contain"留黑边居中,durationMs(默认3500),fadeInMs/fadeOutMs(默认500),qrUrl?,ctaText?,ctaColor?("#RRGGBB"),font?};传空串清空。★只改某一集用 set_episode_poster_card(带校验,填错直接报错),这里填错的项会被静默丢掉'),
 }
 
 /** 把友好 ethnicity 枚举 + note 组装成后端认的结构化族裔锁 { code, note? }。 */
@@ -889,6 +889,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '确认后拆镜:后台跑(分钟级),立即返回 status:generating。用 get_storyboards 轮询。' +
       '★注意:拆镜会**替换整集所有已有分镜**(已调好/已出图的全丢、要重花钱重来)。每镜 5-7 秒是对 AI 出视频' +
       '优化的**正常**时长(动作镜按节拍约 4 秒写 2~3 拍,短也正常),别因「一镜偏长」觉得有问题就重拆。已有分镜时后端会拦,确认重拆才带 confirm_replace=true。' +
+      '★本集没做过资产提取(本集关联的角色、场景都是 0)时后端会拦:先对本集 extract_assets 再拆镜;quote_storyboards 的 blocked_reason 会提前说明。' +
+      '只有已提取过、本集确实不需要任何角色或场景(如纯字卡集)才带 confirm_no_assets=true。' +
       '★典型耗时 5~10 分钟(生产实测 7~8.4 分钟;**单次 LLM 调用就可能 3~7 分钟**)。' +
       '**60 秒、甚至 3 分钟内查不到分镜都是正常的**——用 get_run_status 判断是否还在跑。' +
       'running:true 就继续等;重发一次等于把整集分镜重来一遍。' +
@@ -897,11 +899,13 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       episode_id: z.number().int().positive(),
       quote_id: z.string().describe('来自 quote_storyboards'),
       confirm_replace: z.boolean().optional().describe('本集已有分镜时必须 true 才重拆(会替换整集所有分镜,已出图白费)'),
+      confirm_no_assets: z.boolean().optional().describe('仅当已提取过、本集确实不需要任何角色/场景(如纯字卡集)时传 true,跳过「本集未做资产提取」拦截'),
       ...REVIEW_ARGS,
     },
-    async ({ episode_id, quote_id, confirm_replace, review_token, acknowledge_review, auto_acknowledge }) =>
+    async ({ episode_id, quote_id, confirm_replace, confirm_no_assets, review_token, acknowledge_review, auto_acknowledge }) =>
       jsonResult(await client.producePost(`/episodes/${episode_id}/storyboards/generate`, {
         quote_id, review_token, acknowledge_review, auto_acknowledge, ...(confirm_replace ? { confirm_replace } : {}),
+        ...(confirm_no_assets ? { confirm_no_assets } : {}),
       })),
   )
   server.tool(
@@ -2454,7 +2458,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '(或 generate_videos 的参考视频通道)。本工具的语义是「这段视频**就是**成片本身,不再生成」。' +
       '两者传的是同一个文件,结果天差地别:走本工具会让该镜从此被出视频守卫拒(含 edit_video_shot),' +
       '得先 clear_shot_footage 或显式 replace_user_footage 才能继续。' +
-      '要换回 AI 生成请先 clear_shot_footage。' + VIDEO_QC_HINT,
+      '要换回 AI 生成请先 clear_shot_footage。' +
+      '⚠️★**旁白卡镜(黑底字卡镜,导入 [字卡 Ns] 建出的、出视频显示 not_required 的那种)不收素材**:终拼只渲染字卡、不用视频,上传会被 400(narration_card_no_footage)拒。' +
+      '片尾 logo / 品牌画面用 set_episode_poster_card;要在一段画面上叠字,把视频传到普通镜再用 set_shot_verse_cards。' + VIDEO_QC_HINT,
     {
       storyboard_id: z.number().int().positive(),
       file_path: z.string().describe('本地视频路径(mp4/mov/webm/m4v,≤300MB)'),
@@ -3066,7 +3072,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '别去重试出图——这类镜(action_motion_class=state_change 却没写终态)的尾帧历史成功率 9.4%,' +
       '有终态描述的是 40.2%;不补描述就重生,送厂商的提示词里根本没有终态段,画出来仍和首帧一样、' +
       '还是会被拒,而每次重生都照常扣费。get_shot_prompts 的 terminal_desc_missing=true 就是这个信号。' +
-      '★★【构图契约不会跟着改】改 shot_type / character_ids / character_presence / description / action / image_prompt / first_frame_prompt 后,' +
+      '★★【构图契约不会跟着改】改 shot_type / character_ids / character_presence / description / action 后,或 image_prompt / first_frame_prompt 里的人数、景别、局部(手/脸)、空镜/道具这类构图词变了时(只改服装、质感、光线措辞不算),' +
       '本镜的构图契约(画面里可见几人、主体是人物还是手部等局部/道具、景别)不会自动重推,出图组织画面与帧审计判人数仍按旧契约来' +
       '(典型:改成局部特写、解绑全部角色,出图照样画人像)。回执带 frame_contract_advisory 就是这种情况:讲给客户,' +
       '客户同意后调 rederive_shot_contract(按 token 后付)重推,得出 updated 再报价出图;客户确认画面人数与主体都没变可以不推。' +
@@ -3192,7 +3198,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '本镜注入谁的定妆图由绑定决定(get_storyboards 的 character_ids / scene_id),删标记不会让已绑定的人消失;' +
       '带 #变体 的标记是那张变体图的唯一来源;给未绑定的角色写标记会把他的图注入进来。' +
       '★这是分镜表里的正文层;出图/出视频时平台还会在其上拼身份锚、一致性约束与参考图指令(不在此处,也无需你写)。' +
-      '改完提示词不会自动重出图/视频,要让画面跟上得再 regen 对应镜。',
+      '改完提示词不会自动重出图/视频,要让画面跟上得再 regen 对应镜。' +
+      '★first_frame_prompt 是真实字段(空就是 null,不会回退成 image_prompt);first_frame_basis 说首帧正文以哪条为准:first_frame_prompt=它作为 [START FRAME] 段排在 image_prompt 之前、压过它,image_prompt=首帧只按 image_prompt 出。review 层 agent_qc 素材的 shot_spec 同一口径。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) => jsonResult(await client.produceGet(`/storyboards/${storyboard_id}/prompts`)),
   )
@@ -3574,7 +3581,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
         duration_ms: z.number().int().min(500).max(60000).optional().describe('显示时长,默认 4000;超出本镜部分截掉'),
         fade_in_ms: z.number().int().min(0).max(5000).optional().describe('淡入毫秒,默认 600'),
         fade_out_ms: z.number().int().min(0).max(5000).optional().describe('淡出毫秒,默认 600'),
-        font_size: z.number().int().min(20).max(200).optional().describe('字号上限(输出像素),默认 64;放不下自动缩小'),
+        font_size: z.number().int().min(20).max(200).optional().describe('字号**上限**,单位是成片输出像素(竖屏 1080×1920 就按 1080 宽算,不是 720p 基准),默认 64。实际字号 = min(上限, 最长那一列/行放得下的最大字号);横排按字符估宽(汉字 1 个字宽、英文字母约 0.6 个),所以一行很长的英文会把整张卡压小、调大上限也没用——要大字就在 text 里换行把长句拆短'),
         font: z.string().optional().describe('字体名,默认行书 Zhi Mang Xing;规整宋体填 Noto Serif CJK SC(渲染机已装的才生效)'),
         backdrop: z.enum(['none', 'black']).optional().describe('black = 整屏黑底结语卡'),
         motion: z.enum(['static', 'scroll_up']).optional().describe('scroll_up = 自下而上滚动的片尾名单'),
@@ -4565,6 +4572,37 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '给整部剧生成片头封面图。图片步,按用量后付。',
     { drama_id: z.number().int().positive() },
     async ({ drama_id }) => jsonResult(await client.producePost(`/dramas/${drama_id}/cover`)),
+  )
+
+  server.tool(
+    'get_episode_poster_card',
+    '读某一集的片尾海报卡现值(免费)。source=episode 是本集自己设的;drama-default 是回退到剧级 poster_card_default;none 是成片不带片尾海报卡。set_episode_poster_card 是**整组覆盖**,改之前先读。',
+    { episode_id: z.number().int().positive() },
+    async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/poster-card`)),
+  )
+  server.tool(
+    'set_episode_poster_card',
+    '给某一集设/改/清**片尾海报卡**:一张静帧图接在成片最末尾(片尾 logo、主视觉 KV、关注二维码 + 一句 CTA),免费纯数据。' +
+      '一集最多 5 张,依次播放;**整组覆盖**(先 get_episode_poster_card 读现值),posters=[] 清空本集(之后回退剧级 poster_card_default,剧级也没有就不带)。' +
+      '图先用 upload_image 上传拿 https 地址;要 AI 出一张海报用 generate_episode_poster(出图完成会自动挂成本集海报卡)。' +
+      '填错直接 400 报出是哪一张哪个字段,不会「保存成功、成片里没有」。改完调 compose_episode 重新终拼生效(rerender_episode 沿用已存时间轴,带不上)。' +
+      '★片尾 logo 别用旁白卡镜 + upload_shot_footage 做——旁白卡镜不使用上传的视频,会被拒。★别自己下载成片拼尾帧再上传。',
+    {
+      episode_id: z.number().int().positive(),
+      posters: z.array(z.object({
+        image_url: z.string().min(1).describe('海报主视觉图:upload_image 返回的 https 地址或 static/ 路径'),
+        fit: z.enum(['cover', 'contain']).optional().describe('cover=铺满后裁切(默认,图按成片画幅做时用);contain=完整显示、四周留黑(logo / 比例不同的图用它)'),
+        duration_ms: z.number().int().min(800).max(30000).optional().describe('这张显示多久,默认 3500'),
+        fade_in_ms: z.number().int().min(0).max(5000).optional().describe('淡入毫秒,默认 500'),
+        fade_out_ms: z.number().int().min(0).max(5000).optional().describe('淡出毫秒,默认 500'),
+        qr_url: z.string().optional().describe('可选:二维码图地址,叠在右下角(白底)'),
+        cta_text: z.string().max(60).optional().describe('可选:底部一句号召文案(≤60 字),只写客户给的'),
+        cta_color: z.string().optional().describe('CTA 文字色 #RRGGBB,默认白'),
+        font: z.string().optional().describe('CTA 字体名,默认 Noto Sans CJK SC(渲染机已装的才生效)'),
+      })).max(5).describe('整组海报卡(顺序即播放顺序);[] = 清空本集'),
+    },
+    async ({ episode_id, posters }) =>
+      jsonResult(await client.producePut(`/episodes/${episode_id}/poster-card`, { posters })),
   )
 
   // ========== P2 · 音效 / 特效 / 转场 ==========

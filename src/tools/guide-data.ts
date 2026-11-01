@@ -325,7 +325,7 @@ export const PIPELINE: PipelineStep[] = [
   },
   {
     step: '10 成片与交付',
-    tools: ['compose_episode', 'get_final_cut', 'get_export', 'rerender_episode', 'get_deliverables', 'generate_deliverables', 'render_multi_aspect', 'generate_effects', 'generate_transitions', 'set_drama_logo', 'get_drama_logo', 'generate_episode_poster', 'generate_drama_poster', 'generate_cover', 'translate_subtitles', 'get_pipeline_status'],
+    tools: ['compose_episode', 'get_final_cut', 'get_export', 'rerender_episode', 'get_deliverables', 'generate_deliverables', 'render_multi_aspect', 'generate_effects', 'generate_transitions', 'set_drama_logo', 'get_drama_logo', 'generate_episode_poster', 'get_episode_poster_card', 'set_episode_poster_card(片尾海报卡:片尾 logo / KV / 二维码 + CTA)', 'generate_drama_poster', 'generate_cover', 'translate_subtitles', 'get_pipeline_status'],
     billing: '免费',
     note: '终拼免费(ffmpeg+COS);成片前用 `get_pipeline_status` 确认没有缺镜;配乐晚于成片(bgm_stale)重新 compose 即可。',
   },
@@ -388,6 +388,7 @@ export const OPTIONAL_BOOSTS = [
   { what: '场景组(同场景多镜一次成组出视频)', tool: 'generate_scene_groups', when: '先 `get_scene_group_plan` 看方案' },
   { what: '口型同步', tool: 'lipsync_episode', when: 'TTS 配音项目需要对口型时' },
   { what: '海报 / 封面', tool: 'generate_episode_poster', when: '成片后;`generate_drama_poster` / `generate_cover` 同族' },
+  { what: '片尾海报卡(片尾 logo / 主视觉 / 二维码 + CTA,接在成片最末尾)', tool: 'set_episode_poster_card', when: '终拼前;先 upload_image 传图,分集用它、全剧默认用 update_project_settings 的 poster_card_default(JSON);别拿旁白卡镜 + upload_shot_footage 做片尾 logo(会被拒)' },
   { what: '音效 / 特效 / 转场(本地库匹配)', tool: 'generate_sfx', when: '免费;`generate_effects` / `generate_transitions` 同族' },
   { what: '配乐', tool: 'generate_bgm', when: '按整集情绪弧线生成;终拼自动接管。客户想指定音乐方向就带 prompt(整集一条),写法先读 `get_bgm_prompt_guide`(免费);不带 prompt 就是全自动。客户给了明确参数(情绪/主奏配器/BPM/大小调)用 director 锁定(硬约束,按集保存、下次不传沿用,可按幕;按幕前先 get_bgm_plan 免费看分幕)。客户想先听几版再定:candidates=2~3 出完整候选(每首单独计费,先 quote_bgm_candidates 报价),select_bgm_candidate 挑' },
   { what: '字幕翻译', tool: 'translate_subtitles', when: '出海;双语烧录在项目设定里开' },
