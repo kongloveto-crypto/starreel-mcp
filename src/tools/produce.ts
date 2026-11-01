@@ -1271,7 +1271,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★出完视频、配音(generate_tts)、配乐后都调一次;compose_episode 之前必须审过,带返回的 review_token。' +
       '\n' + PRE_COMPOSE_CHECK_HINT + '返回体的 pre_compose_checks 是同一份清单(结构化,逐项 tool/scope/when/cost)。\n' +
       '更细的检查(要解码画面/音轨)另有 scan_intra_shot_cuts / scan_dialogue_coverage / audit_silent_shot_audio;拼完成片再跑 review_final_cut。' +
-      '★返回带 post_production_advisory = 剧本标注「后期」的叙事必需特效还没处理(平台不会合成):原样告诉客户,用 get_post_production_checklist 看清单。' + REVIEW_PAGE_HINT + AGENT_QC_HINT,
+      '★返回带 post_production_advisory = 剧本标注「后期」的叙事必需特效还没处理(平台不会合成):原样告诉客户,用 get_post_production_checklist 看清单。' +
+      '★findings 里 video_intra_shot_cut = 厂商在单镜片内自行硬切(换机位/机位倒转),逐镜切点秒数与建议裁剪窗口在 intra_shot_cut_advisory(suggested_trim 可直接 trim_shot,免费;为 null 才考虑重出);判据读出视频时与 scan_intra_shot_cuts 留下的探测结果,没扫过的旧视频先跑一次 scan_intra_shot_cuts。' +
+      'hit_stop_advisory = 上一次成片里被加了命中定格的镜(画面在打击点停一下),客户嫌卡顿就 set_shot_post 关掉或校正落点。' + REVIEW_PAGE_HINT + AGENT_QC_HINT,
     { episode_id: z.number().int().positive(), ...REVIEW_PAGE_ARGS },
     async ({ episode_id, ...page }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/videos`, reviewBody(undefined, page))),
   )
@@ -1661,7 +1663,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '查某一集成片状态与下载链接。status=completed 时返回 download_url(我方 COS 直链,可直接下载)。免费。' +
       '★bgm_stale=true 表示配乐在成片之后生成/改动、尚未进成片:重新 compose_episode(免费)即可,别用 re-render。' +
       '★若设过当前交付版(register_external_delivery 登记的外部版,或 set_current_delivery 指定的平台版),另返回 delivery——那才是客户实际收到的一版;download_url 仍是平台最新一次拼的成片。' +
-      '要看每一版成片用了什么、哈希是多少,用 list_deliveries。',
+      '要看每一版成片用了什么、哈希是多少,用 list_deliveries。' +
+      '★返回 hit_stop_shots = 剪辑层给哪些镜加了「命中定格」(画面在打击点停一下)、落在本镜/成片第几毫秒:客户说某镜中途「顿一下」「卡顿」先看这里,落点不对用 set_shot_post(hit_stop_at_ms) 校正或 hit_stop=false 关掉,再 compose_episode(都免费),别去重出视频。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/final-cut`)),
   )
@@ -2861,13 +2864,15 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'set_shot_post',
-    "终拼后期(镜级,免费,不重生、不扣费):① mirror_h 单镜水平镜像——画面左右翻转并同时对调左右声道,补救过轴镜(人物站位/伸手方向与前后镜左右相反);画面里有字(招牌、烧录字幕)的镜不要镜像,字会反过来。② grade_group 调色分组名——同名的镜一起自动拉平曝光与白平衡(默认按场景分组;单场景剧里清晨/黄昏/夜这类不同时段要各起一个组名,否则会被拉成一锅);grade_ref=true 把本镜设为该组的参考镜,组内其它镜向它看齐(不设则向组内中位数看齐)。③ audio_lead_in_ms J-cut——本镜的声音比画面早这么多毫秒进来(压在上一镜尾部,上一镜声音随之淡出),0~800,常用 300~500;原声镜的提前声音取自本镜源片入点之前那一段,所以**本镜必须先用 trim_shot 设入点(in_ms)≥提前量**,不够会按入点余量自动缩短,入点为 0 则不生效;有叠化转场或变速的接缝不做。只传要改的键,空调用=查看当前值;grade_group 传 null 取消分组。回包 gray_on=false 表示本剧尚未开放这组后期(值已保存,开放后生效)。改完要 compose_episode 重新合成才生效(rerender_episode 沿用旧时间线,不会带上)。",
+    "终拼后期(镜级,免费,不重生、不扣费):① mirror_h 单镜水平镜像——画面左右翻转并同时对调左右声道,补救过轴镜(人物站位/伸手方向与前后镜左右相反);画面里有字(招牌、烧录字幕)的镜不要镜像,字会反过来。② grade_group 调色分组名——同名的镜一起自动拉平曝光与白平衡(默认按场景分组;单场景剧里清晨/黄昏/夜这类不同时段要各起一个组名,否则会被拉成一锅);grade_ref=true 把本镜设为该组的参考镜,组内其它镜向它看齐(不设则向组内中位数看齐)。③ audio_lead_in_ms J-cut——本镜的声音比画面早这么多毫秒进来(压在上一镜尾部,上一镜声音随之淡出),0~800,常用 300~500;原声镜的提前声音取自本镜源片入点之前那一段,所以**本镜必须先用 trim_shot 设入点(in_ms)≥提前量**,不够会按入点余量自动缩短,入点为 0 则不生效;有叠化转场或变速的接缝不做。④ hit_stop / hit_stop_at_ms 命中定格——剪辑层会在动作镜的打击点让画面停约 0.15 秒再轻微震动(get_final_cut 的 hit_stop_shots 列出哪些镜被加了、落在哪一毫秒);客户觉得某镜中途「顿一下」像卡顿,hit_stop=false 关掉本镜,或 hit_stop_at_ms=<本镜内毫秒,从入点算> 把落点挪到真正打中的那一下;hit_stop_at_ms=null 回到自动估算。这一项不受 gray_on 限制,回包 hit_stop_gray_on=false 表示本剧本来就没开定格。只传要改的键,空调用=查看当前值;grade_group 传 null 取消分组。回包 gray_on=false 表示本剧尚未开放①~③这组后期(值已保存,开放后生效)。改完要 compose_episode 重新合成才生效(rerender_episode 沿用旧时间线,不会带上)。",
     {
       storyboard_id: z.number().int().positive(),
       mirror_h: z.boolean().optional(),
       grade_group: z.string().max(40).nullable().optional(),
       grade_ref: z.boolean().optional(),
       audio_lead_in_ms: z.number().int().min(0).max(800).optional(),
+      hit_stop: z.boolean().optional().describe('false=本镜不做命中定格;true=照剧级规则(默认)'),
+      hit_stop_at_ms: z.number().int().min(1).max(60000).nullable().optional().describe('指定定格落点(本镜内毫秒,从入点算);null=回到自动估算'),
     },
     async ({ storyboard_id, ...rest }) =>
       jsonResult(await client.producePut(`/storyboards/${storyboard_id}/compose-post`, rest)),

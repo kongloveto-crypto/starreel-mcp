@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.288",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.288 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.290",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.290 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -7771,7 +7771,7 @@
       "get": {
         "operationId": "get_final_cut",
         "summary": "查某一集成片状态与下载链接",
-        "description": "查某一集成片状态与下载链接。status=completed 时返回 download_url(我方 COS 直链,可直接下载)。免费。★bgm_stale=true 表示配乐在成片之后生成/改动、尚未进成片:重新 compose_episode(免费)即可,别用 re-render。★若设过当前交付版(register_external_delivery 登记的外部版,或 set_current_delivery 指定的平台版),另返回 delivery——那才是客户实际收到的一版;download_url 仍是平台最新一次拼的成片。要看每一版成片用了什么、哈希是多少,用 list_deliveries。",
+        "description": "查某一集成片状态与下载链接。status=completed 时返回 download_url(我方 COS 直链,可直接下载)。免费。★bgm_stale=true 表示配乐在成片之后生成/改动、尚未进成片:重新 compose_episode(免费)即可,别用 re-render。★若设过当前交付版(register_external_delivery 登记的外部版,或 set_current_delivery 指定的平台版),另返回 delivery——那才是客户实际收到的一版;download_url 仍是平台最新一次拼的成片。要看每一版成片用了什么、哈希是多少,用 list_deliveries。★返回 hit_stop_shots = 剪辑层给哪些镜加了「命中定格」(画面在打击点停一下)、落在本镜/成片第几毫秒:客户说某镜中途「顿一下」「卡顿」先看这里,落点不对用 set_shot_post(hit_stop_at_ms) 校正或 hit_stop=false 关掉,再 compose_episode(都免费),别去重出视频。",
         "tags": [
           "episodes"
         ],
@@ -9772,7 +9772,7 @@
       "post": {
         "operationId": "review_videos",
         "summary": "【视频与配音层硬闸·免费】审查本集视频与配音——覆盖与质量:缺视频 / 还在生成 / 生成失败 / 被厂商拒;首帧换过而视频还是旧帧出的(video_stale);疑似片尾硬切、无台词镜意外人声(warning);配音剧:台词镜缺配音、会开",
-        "description": "【视频与配音层硬闸·免费】审查本集视频与配音——覆盖与质量:缺视频 / 还在生成 / 生成失败 / 被厂商拒;首帧换过而视频还是旧帧出的(video_stale);疑似片尾硬切、无台词镜意外人声(warning);配音剧:台词镜缺配音、会开口的角色没音色、缺旁白角色;原声剧:出片时没挂上当前声线的镜、没锁声线的角色;缺配乐(warning)。★出完视频、配音(generate_tts)、配乐后都调一次;compose_episode 之前必须审过,带返回的 review_token。\n★★【成片前自检·review_videos 通过后、compose_episode 之前】别靠反复导出整片、手工试转场来找问题——逐镜与接缝的问题有专门工具,拼之前按序过一遍:①这一集换过定妆图 / 设定图 / 场景图 / 镜头帧 → 先 get_stale_portrait_frames(episode_id,免费)看哪些镜的在用帧还基于旧资产,拿不准该用哪一版的镜再 get_asset_versions(storyboard_id,免费)逐镜看版本与依赖(unknown 是证据不足、不是已过期;重出要付费,清单讲给客户由客户定);②scan_intra_shot_cuts(episode_id,免费)查厂商在单镜内自行硬切的镜;③逐镜 recommend_trim_window(storyboard_id,免费)看冻结尾段与有效动作区间(组内镜返回 applicable=false,跳过),有推荐就 trim_shot 应用(免费);④audit_seams(episode_id)查相邻镜接缝的剪辑连续性:默认 dry_run 只列待审范围(免费),真执行按实际文本 token 计费,讲给客户、客户明确接受后才带 dry_run:false + confirm_usage_billing:true,结果看 get_storyboards 的 seam_review;⑤再 compose_episode。拼完成片发现跳切 / 拖尾 / 接不上,回到这几个工具按镜定位后只修那几镜,别整片反复导出试错。这些都是提示性检查,不过闸;裁剪与接缝审核不让 review_videos 的 token 失效。返回体的 pre_compose_checks 是同一份清单(结构化,逐项 tool/scope/when/cost)。\n更细的检查(要解码画面/音轨)另有 scan_intra_shot_cuts / scan_dialogue_coverage / audit_silent_shot_audio;拼完成片再跑 review_final_cut。★返回带 post_production_advisory = 剧本标注「后期」的叙事必需特效还没处理(平台不会合成):原样告诉客户,用 get_post_production_checklist 看清单。★返回体太大(超出工具结果上限)时:先带 materials_view=summary 拿结论与素材清单,再用 materials_offset / materials_limit(如 0/5、5/5…)分页拉 full 逐件质检;每页都是免费重调,review_token 覆盖全部素材——翻完再用最后一次拿到的 token 调 submit_qc_report,inspected 仍要列全部 ref。不带这三个参数时返回与以前完全一样。\n★【增量复审·省时省量】review_storyboards / review_frames / review_assets 可带 base_review_token(上一张已交质检且 verdict=pass 的本层 token):只把变更镜及其相邻镜列进 agent_qc.materials、findings 只回这些镜(incremental.applied=true,另有 findings_hidden 计数),质检报告只需覆盖它们;共享资产变了、base 没质检通过时自动退回整集(incremental.reason 说明原因)。改一两镜后别整集重审。\n★【agent 亲自质检·免费】返回的 agent_qc 里有本层清单(checklist)和本集要看的素材(materials,每件一个 ref,图/视频给链接)。平台只判「有没有、在不在、被没被拒」,「像不像、对不对、好不好」要你自己看:图片下载打开看、视频至少抽开头/中间/结尾帧、文本用 tool 通读。逐条回答清单(ok / issue / na,issue 写明哪件什么问题),看过的每个 ref 都列进 inspected,调 submit_qc_report 提交;质检结论原样讲给客户。agent_qc.required=true 时没提交报告这张 review_token 进不了下一步(400 agent_qc_required),报告有问题与平台 error 同样默认拦。\n★【客户验收项】review_frames / review_videos 会把客户登记的具体要求(add_acceptance_criteria)追加进 checklist(id 以 req: 开头),附 acceptance_criteria:平台通用审查不知道这些要求,通过了不代表满足——逐条亲眼核对后在 submit_qc_report 里答,结论讲给客户,由客户 confirm_acceptance_criterion 确认。",
+        "description": "【视频与配音层硬闸·免费】审查本集视频与配音——覆盖与质量:缺视频 / 还在生成 / 生成失败 / 被厂商拒;首帧换过而视频还是旧帧出的(video_stale);疑似片尾硬切、无台词镜意外人声(warning);配音剧:台词镜缺配音、会开口的角色没音色、缺旁白角色;原声剧:出片时没挂上当前声线的镜、没锁声线的角色;缺配乐(warning)。★出完视频、配音(generate_tts)、配乐后都调一次;compose_episode 之前必须审过,带返回的 review_token。\n★★【成片前自检·review_videos 通过后、compose_episode 之前】别靠反复导出整片、手工试转场来找问题——逐镜与接缝的问题有专门工具,拼之前按序过一遍:①这一集换过定妆图 / 设定图 / 场景图 / 镜头帧 → 先 get_stale_portrait_frames(episode_id,免费)看哪些镜的在用帧还基于旧资产,拿不准该用哪一版的镜再 get_asset_versions(storyboard_id,免费)逐镜看版本与依赖(unknown 是证据不足、不是已过期;重出要付费,清单讲给客户由客户定);②scan_intra_shot_cuts(episode_id,免费)查厂商在单镜内自行硬切的镜;③逐镜 recommend_trim_window(storyboard_id,免费)看冻结尾段与有效动作区间(组内镜返回 applicable=false,跳过),有推荐就 trim_shot 应用(免费);④audit_seams(episode_id)查相邻镜接缝的剪辑连续性:默认 dry_run 只列待审范围(免费),真执行按实际文本 token 计费,讲给客户、客户明确接受后才带 dry_run:false + confirm_usage_billing:true,结果看 get_storyboards 的 seam_review;⑤再 compose_episode。拼完成片发现跳切 / 拖尾 / 接不上,回到这几个工具按镜定位后只修那几镜,别整片反复导出试错。这些都是提示性检查,不过闸;裁剪与接缝审核不让 review_videos 的 token 失效。返回体的 pre_compose_checks 是同一份清单(结构化,逐项 tool/scope/when/cost)。\n更细的检查(要解码画面/音轨)另有 scan_intra_shot_cuts / scan_dialogue_coverage / audit_silent_shot_audio;拼完成片再跑 review_final_cut。★返回带 post_production_advisory = 剧本标注「后期」的叙事必需特效还没处理(平台不会合成):原样告诉客户,用 get_post_production_checklist 看清单。★findings 里 video_intra_shot_cut = 厂商在单镜片内自行硬切(换机位/机位倒转),逐镜切点秒数与建议裁剪窗口在 intra_shot_cut_advisory(suggested_trim 可直接 trim_shot,免费;为 null 才考虑重出);判据读出视频时与 scan_intra_shot_cuts 留下的探测结果,没扫过的旧视频先跑一次 scan_intra_shot_cuts。hit_stop_advisory = 上一次成片里被加了命中定格的镜(画面在打击点停一下),客户嫌卡顿就 set_shot_post 关掉或校正落点。★返回体太大(超出工具结果上限)时:先带 materials_view=summary 拿结论与素材清单,再用 materials_offset / materials_limit(如 0/5、5/5…)分页拉 full 逐件质检;每页都是免费重调,review_token 覆盖全部素材——翻完再用最后一次拿到的 token 调 submit_qc_report,inspected 仍要列全部 ref。不带这三个参数时返回与以前完全一样。\n★【增量复审·省时省量】review_storyboards / review_frames / review_assets 可带 base_review_token(上一张已交质检且 verdict=pass 的本层 token):只把变更镜及其相邻镜列进 agent_qc.materials、findings 只回这些镜(incremental.applied=true,另有 findings_hidden 计数),质检报告只需覆盖它们;共享资产变了、base 没质检通过时自动退回整集(incremental.reason 说明原因)。改一两镜后别整集重审。\n★【agent 亲自质检·免费】返回的 agent_qc 里有本层清单(checklist)和本集要看的素材(materials,每件一个 ref,图/视频给链接)。平台只判「有没有、在不在、被没被拒」,「像不像、对不对、好不好」要你自己看:图片下载打开看、视频至少抽开头/中间/结尾帧、文本用 tool 通读。逐条回答清单(ok / issue / na,issue 写明哪件什么问题),看过的每个 ref 都列进 inspected,调 submit_qc_report 提交;质检结论原样讲给客户。agent_qc.required=true 时没提交报告这张 review_token 进不了下一步(400 agent_qc_required),报告有问题与平台 error 同样默认拦。\n★【客户验收项】review_frames / review_videos 会把客户登记的具体要求(add_acceptance_criteria)追加进 checklist(id 以 req: 开头),附 acceptance_criteria:平台通用审查不知道这些要求,通过了不代表满足——逐条亲眼核对后在 submit_qc_report 里答,结论讲给客户,由客户 confirm_acceptance_criterion 确认。",
         "tags": [
           "episodes"
         ],
@@ -15043,7 +15043,7 @@
       "put": {
         "operationId": "set_shot_post",
         "summary": "终拼后期(镜级,免费,不重生、不扣费):① mirror_h 单镜水平镜像——画面左右翻转并同时对调左右声道,补救过轴镜(人物站位/伸手方向与前后镜左右相反);画面里有字(招牌、烧录字幕)的镜不要镜像,字会反过来",
-        "description": "终拼后期(镜级,免费,不重生、不扣费):① mirror_h 单镜水平镜像——画面左右翻转并同时对调左右声道,补救过轴镜(人物站位/伸手方向与前后镜左右相反);画面里有字(招牌、烧录字幕)的镜不要镜像,字会反过来。② grade_group 调色分组名——同名的镜一起自动拉平曝光与白平衡(默认按场景分组;单场景剧里清晨/黄昏/夜这类不同时段要各起一个组名,否则会被拉成一锅);grade_ref=true 把本镜设为该组的参考镜,组内其它镜向它看齐(不设则向组内中位数看齐)。③ audio_lead_in_ms J-cut——本镜的声音比画面早这么多毫秒进来(压在上一镜尾部,上一镜声音随之淡出),0~800,常用 300~500;原声镜的提前声音取自本镜源片入点之前那一段,所以**本镜必须先用 trim_shot 设入点(in_ms)≥提前量**,不够会按入点余量自动缩短,入点为 0 则不生效;有叠化转场或变速的接缝不做。只传要改的键,空调用=查看当前值;grade_group 传 null 取消分组。回包 gray_on=false 表示本剧尚未开放这组后期(值已保存,开放后生效)。改完要 compose_episode 重新合成才生效(rerender_episode 沿用旧时间线,不会带上)。",
+        "description": "终拼后期(镜级,免费,不重生、不扣费):① mirror_h 单镜水平镜像——画面左右翻转并同时对调左右声道,补救过轴镜(人物站位/伸手方向与前后镜左右相反);画面里有字(招牌、烧录字幕)的镜不要镜像,字会反过来。② grade_group 调色分组名——同名的镜一起自动拉平曝光与白平衡(默认按场景分组;单场景剧里清晨/黄昏/夜这类不同时段要各起一个组名,否则会被拉成一锅);grade_ref=true 把本镜设为该组的参考镜,组内其它镜向它看齐(不设则向组内中位数看齐)。③ audio_lead_in_ms J-cut——本镜的声音比画面早这么多毫秒进来(压在上一镜尾部,上一镜声音随之淡出),0~800,常用 300~500;原声镜的提前声音取自本镜源片入点之前那一段,所以**本镜必须先用 trim_shot 设入点(in_ms)≥提前量**,不够会按入点余量自动缩短,入点为 0 则不生效;有叠化转场或变速的接缝不做。④ hit_stop / hit_stop_at_ms 命中定格——剪辑层会在动作镜的打击点让画面停约 0.15 秒再轻微震动(get_final_cut 的 hit_stop_shots 列出哪些镜被加了、落在哪一毫秒);客户觉得某镜中途「顿一下」像卡顿,hit_stop=false 关掉本镜,或 hit_stop_at_ms=<本镜内毫秒,从入点算> 把落点挪到真正打中的那一下;hit_stop_at_ms=null 回到自动估算。这一项不受 gray_on 限制,回包 hit_stop_gray_on=false 表示本剧本来就没开定格。只传要改的键,空调用=查看当前值;grade_group 传 null 取消分组。回包 gray_on=false 表示本剧尚未开放①~③这组后期(值已保存,开放后生效)。改完要 compose_episode 重新合成才生效(rerender_episode 沿用旧时间线,不会带上)。",
         "tags": [
           "storyboards"
         ],
@@ -15086,6 +15086,21 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 800
+                  },
+                  "hit_stop": {
+                    "type": "boolean"
+                  },
+                  "hit_stop_at_ms": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 60000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }

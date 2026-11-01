@@ -367,6 +367,8 @@ export const QA_TOOLS: QaTool[] = [
   ] },
   { symptom: '动作发生在裁剪窗口之外', run: 'recommend_trim_window', then: ['trim_shot'] },
   { symptom: '镜头过轴(人物左右站位 / 伸手方向与前后镜相反)', run: 'set_shot_post(mirror_h=true,免费;画面翻转同时对调左右声道;画面里有字的镜别用)', then: ['compose_episode'] },
+  { symptom: '成片里某个动作镜中途「顿一下再跳」/ 像卡顿', run: 'get_final_cut(看 hit_stop_shots:剪辑层命中定格加在哪些镜、落在第几毫秒)', then: ['set_shot_post(hit_stop=false 关掉本镜,或 hit_stop_at_ms 挪到真正打中那一下;免费)', 'compose_episode'] },
+  { symptom: '一个镜头里画面中途硬切 / 机位突然倒转', run: 'review_videos(看 intra_shot_cut_advisory 的切点与 suggested_trim;没扫过的旧视频先 scan_intra_shot_cuts)', then: ['trim_shot(按 suggested_trim 裁,免费)', 'compose_episode'] },
   { symptom: '同一段戏相邻镜头忽明忽暗 / 冷暖不一', run: 'set_shot_post(grade_group 给同一时段的镜起同一个组名,grade_ref=true 指定参考镜;免费)', then: ['compose_episode'] },
   { symptom: '一切镜环境声 / 底噪就跳、听着不连续', run: 'set_ambient_bed(同一段戏的镜挂同一条环境声素材,免费)', then: ['compose_episode'] },
   { symptom: '切镜太生硬,想让下一镜的声音先进来(J-cut)', run: 'trim_shot(先给下一镜设入点 in_ms ≥ 提前量)', then: ['set_shot_post(audio_lead_in_ms=300~500)', 'compose_episode'] },
