@@ -1075,7 +1075,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '强烈建议 generate_frames/generate_videos 前调,防白花钱被拒。\n' +
       '查这几类:①真人肖像/克隆音色授权 ②图像审核高危词 ③配音覆盖与大空档 ' +
       '④**指令自相矛盾(kind=prompt-conflict)**——同一镜里互斥的要求(如宽景别却标了特写主体、' +
-      '既要站立又要坐姿),这类镜**任何正确的图都满足不了**,不改就会反复被拒并反复扣费,' +
+      '既要站立又要坐姿;标中景/近景却写奔跑追逐、整个人腾空跃起这类全身动作——画完整只能拉到脚,' +
+      '会被景别闸反复拒;客户写明「腰部以上」等局部取景的不报),这类镜**任何正确的图都满足不了**,不改就会反复被拒并反复扣费,' +
       '出现时应先按提示改分镜再出图,而不是重试。\n' +
       '★**怎么改不用你猜**:调 plan_precheck_fix 让平台算出提案(哪一镜、把什么改成什么),' +
       '再用 apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳') + '——比你自己用 update_shot 盲改稳,' +
@@ -1185,10 +1186,12 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'review_storyboards',
     '【第②道硬闸·免费】审查分镜:禁区词(会被厂商审核拒、白扣费)、镜头时长分布、相邻构图重复、' +
-      '同场景角色站位漂移、情绪曲线峰谷、关键镜标记。★generate_frames 之前必须先跑本工具——' +
+      '同场景角色站位漂移、情绪曲线峰谷、关键镜标记、景别与画面描述/动作矛盾。★generate_frames 之前必须先跑本工具——' +
       '分镜里的问题一旦整集出图就变成整集废图,单镜修不回来。按 findings.action 用 update_shot/split_shot 修完再复审。' +
       '★code=forbidden_term 的 finding 一次列全所有命中(不再只报前几处),带 `hits`:[{shot 镜号, field 字段, term 命中词}],' +
       'field 是 description / image_prompt / video_prompt / sound_effect 之一;先 get_shot_prompts 读该字段现值,再 update_shot 改掉那个词,不用逐字猜。' +
+      '★code=shot_size_action_mismatch:这几镜标了中景/近景,动作却是奔跑追逐、腾空跃起等全身动作,出帧会被景别闸反复拒、每次扣费。' +
+      '二选一:update_shot 把 shot_type 改成全景/中全景;或保留景别,把动作描述改成只呈现上半身(写明「腰部以上跟拍」);改完 rederive_shot_contract。' +
       '★要表达用光(逆光/侧光/光线明暗)别写进画面描述或提示词,写进 update_shot 的 lighting 字段——它不在禁区词扫描范围,出视频与出图都读它。' +
       '★禁区词判**否定语义**:写「无背景音乐」「不要配乐」不算违规(那是在遵守约束),不必为此改稿。' +
       '★warnings 里的「动作过载」(action_overload,advisory 不拦):一镜塞了超过时长承载量的独立动作,出视频前用 split_shot 拆开或删动作——成片后靠慢放/叠化补救不了。多人各做一件事或本身连贯的一串可忽略。' + AGENT_QC_HINT,
