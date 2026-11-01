@@ -771,6 +771,11 @@ export const ACTION_FILM = {
     '★尾帧只对**单独生成**的镜有用:先看 `get_scene_group_plan`——被并进组的镜,组视频只送组首镜首帧(唯一例外是 seedance-2.5 的关键帧组),给它出的尾帧根本不会送到视频模型,出了白扣费(实测那次就有一张尾帧落在组内、没被用上)。某镜确实需要终态锚,就让它单独出:`update_shot` 给该镜设 video_engine(设了引擎的镜不进场景组,代价是失去与相邻镜一次成片的连贯),否则接受组内由模型自由衔接、不出尾帧。' +
       '单独生成的镜:首帧出完必调 `tail_frame_plan`:冲刺类「从 A 点到 B 点」的镜会被判为状态改变、需要独立尾帧。出尾帧前先看 `get_storyboards` 的 terminal_desc_missing,为 true 的镜用 `update_shot` 写 last_frame_prompt(结束时人在哪、什么姿态、身后留下什么痕迹),否则尾帧大概率被终态闸拒且照常扣费。写完**再跑一次 `review_storyboards`**,用新 token 逐镜 `quote_shot_frame` → `generate_shot_frame`(frame_type=last_frame)出尾帧——改镜会让出首帧时那个 token 失效;组内镜的尾帧出视频时送不到,`tail_frame_plan` 与批量出尾帧都已剔除(见 not_delivered)。报价一次只能用一次,出首帧用掉的 quote_id 不能再拿来出尾帧。首尾帧都出齐后跑 `review_frames`,用它的 token 才能 `generate_videos`(分镜层 token 只放行出帧)。',
     '出完视频用 `scan_intra_shot_cuts` 查镜内乱切;瞬移类的闪切是有意的,别当成故障去重生。',
+    // ★门槛数字与后端 shot-keyframes.ts 同源(shotKeyframeWindow 的最短秒数、shotKeyframeEngineKind 的引擎),
+    // 后端测试 mcp-usability-drama784.test.ts 逐个比对——改判据时这里跟着改,否则那条测试红。
+    '★单镜中间关键帧(`plan_shot_keyframes` → `quote_shot_keyframes` → `generate_shot_keyframes`,在一镜中段钉住某一秒的画面)按剧开放,`get_shot_keyframes` 的 enabled=false 就是本剧没开;' +
+      '而且中间关键帧只对 seedance-2.5(以及 kling-4.0)且 ≥5 秒的镜开放(窗口从第 2 秒到结束前 1 秒、相邻至少隔 2 秒、每镜最多 3 张)。' +
+      '快节奏动作片多是 2~4 秒的短镜,用不上它——短镜的动作过程靠首帧起势 + 尾帧收势(或下一击的预备姿态)两头钉住;确实要在中段钉住一个画面,就把那一镜写成 ≥5 秒再用。',
   ],
   engines:
     '实测样本(单次,3 镜):hailuo-3 720p,3 镜 18 秒视频 1501 点,无镜内乱切,瞬移 / 碎物 / 冲击波都做出;短板是每镜结尾有 2~3 秒「余韵」(蓄力、烟尘扩散)偏慢,夸张造型不保持。' +

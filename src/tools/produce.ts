@@ -118,6 +118,28 @@ const AGENT_QC_HINT =
 /** 增量复审(缺口 #16):上一张本层 token,已交质检且 pass 时只重审变更镜。 */
 const BASE_REVIEW_ARG = z.string().optional().describe('增量复审:上一张本层 review_token(已交 agent 质检且 verdict=pass)。带上只重审变更镜及其相邻镜,素材与质检只覆盖它们;不满足条件自动退回整集')
 
+/**
+ * 审查返回体分页 / 摘要(drama 784:一集 15 镜的 review_storyboards 回 4~17 万字符,超出客户端工具结果上限)。
+ * 都不传 = 旧行为(全量)。token 覆盖全部素材,分页只改这次返回哪些。
+ */
+const REVIEW_PAGE_ARGS = {
+  materials_view: z.enum(['full', 'summary']).optional().describe('agent_qc.materials 的视图:summary=每件只给 ref/kind/tool(去掉 shot_spec 等细节,体积降一个量级),full=全量(默认)'),
+  materials_offset: z.number().int().min(0).optional().describe('agent_qc.materials 分页起点(从 0 起);返回 agent_qc.materials_page.next_offset 指下一页'),
+  materials_limit: z.number().int().min(1).max(50).optional().describe('agent_qc.materials 每页件数(1~50,默认 10);只给 offset 也会按默认 10 分页'),
+}
+const REVIEW_PAGE_HINT =
+  '★返回体太大(超出工具结果上限)时:先带 materials_view=summary 拿结论与素材清单,再用 materials_offset / materials_limit(如 0/5、5/5…)分页拉 full 逐件质检;' +
+  '每页都是免费重调,review_token 覆盖全部素材——翻完再用最后一次拿到的 token 调 submit_qc_report,inspected 仍要列全部 ref。不带这三个参数时返回与以前完全一样。'
+type ReviewPageArgs = { materials_view?: 'full' | 'summary'; materials_offset?: number; materials_limit?: number }
+function reviewBody(base_review_token: string | undefined, a: ReviewPageArgs): Record<string, unknown> | undefined {
+  const b: Record<string, unknown> = {}
+  if (base_review_token) b.base_review_token = base_review_token
+  if (a.materials_view) b.materials_view = a.materials_view
+  if (a.materials_offset !== undefined) b.materials_offset = a.materials_offset
+  if (a.materials_limit !== undefined) b.materials_limit = a.materials_limit
+  return Object.keys(b).length ? b : undefined
+}
+
 /** 资产层 token:出镜头图同时要分镜层(review_token)与资产层两张,资产层这张单独一个参数。 */
 const ASSET_REVIEW_ARG = {
   asset_review_token: z.string().optional().describe('★来自 review_assets 的凭据(资产层硬闸:角色形象图/场景图/道具图;灰度剧必填,缺了 400 会点名 review_assets)。与分镜层的 review_token 一起传'),
@@ -1020,10 +1042,22 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       'intended=有意切换(硬切/换场/时间跳跃/景别大跳/插入镜/外部上传帧),不用管 / missing=两侧帧没齐 / ' +
       'unknown=没标意图也没接过(系统没判,不是有问题) / na=首镜或旁白卡。' +
       'seam_audit_status=pending 表示衔接已落地、平台的衔接审计还没出结论。' +
-      '出视频前只需处理 unchained 与 broken:整集用 chain_frames(先 dry_run),单道用 chain_shot_from_prev / chain_shot_from。',
-    { episode_id: z.number().int().positive() },
-    async ({ episode_id }) =>
-      jsonResult(await client.produceGet(`/episodes/${episode_id}/storyboards`)),
+      '出视频前只需处理 unchained 与 broken:整集用 chain_frames(先 dry_run),单道用 chain_shot_from_prev / chain_shot_from。' +
+      '★返回体太大(超出工具结果上限)时:带 view=summary 先看整集进度,再用 offset / limit 分页拉 full 看具体几镜(带这三个参数时返回 {storyboards:[…], page:{offset,limit,returned,total,next_offset}, view},next_offset=null 即最后一页);都不传时返回与以前完全一样。',
+    {
+      episode_id: z.number().int().positive(),
+      view: z.enum(['full', 'summary']).optional().describe('summary=每镜只回镜号/时长/进度状态/失败分类/产物 URL/绑定 ID/接缝状态(去掉 asset_versions、台词逐行、fail_hint 等,体积降一个量级);full=全量(默认)'),
+      offset: z.number().int().min(0).optional().describe('分页起点(按镜序,从 0 起);返回 page.next_offset 指下一页'),
+      limit: z.number().int().min(1).max(50).optional().describe('每页镜数(1~50,默认 10);只给 offset 也会按默认 10 分页'),
+    },
+    async ({ episode_id, view, offset, limit }) => {
+      const q = new URLSearchParams()
+      if (view) q.set('view', view)
+      if (offset !== undefined) q.set('offset', String(offset))
+      if (limit !== undefined) q.set('limit', String(limit))
+      const qs = q.toString()
+      return jsonResult(await client.produceGet(`/episodes/${episode_id}/storyboards${qs ? `?${qs}` : ''}`))
+    },
   )
 
   // ---------- 在途运行状态(免费):区分「还在跑」和「已经死了」----------
@@ -1194,9 +1228,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '二选一:update_shot 把 shot_type 改成全景/中全景;或保留景别,把动作描述改成只呈现上半身(写明「腰部以上跟拍」);改完 rederive_shot_contract。' +
       '★要表达用光(逆光/侧光/光线明暗)别写进画面描述或提示词,写进 update_shot 的 lighting 字段——它不在禁区词扫描范围,出视频与出图都读它。' +
       '★禁区词判**否定语义**:写「无背景音乐」「不要配乐」不算违规(那是在遵守约束),不必为此改稿。' +
-      '★warnings 里的「动作过载」(action_overload,advisory 不拦):一镜塞了超过时长承载量的独立动作,出视频前用 split_shot 拆开或删动作——成片后靠慢放/叠化补救不了。多人各做一件事或本身连贯的一串可忽略。' + AGENT_QC_HINT,
-    { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG },
-    async ({ episode_id, base_review_token }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/storyboards`, base_review_token ? { base_review_token } : undefined)),
+      '★warnings 里的「动作过载」(action_overload,advisory 不拦):一镜塞了超过时长承载量的独立动作,出视频前用 split_shot 拆开或删动作——成片后靠慢放/叠化补救不了。多人各做一件事或本身连贯的一串可忽略。' + REVIEW_PAGE_HINT + AGENT_QC_HINT,
+    { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG, ...REVIEW_PAGE_ARGS },
+    async ({ episode_id, base_review_token, ...page }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/storyboards`, reviewBody(base_review_token, page))),
   )
   server.tool(
     'review_frames',
@@ -1208,9 +1242,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       'seam_broken(接过但没接上,或上一镜尾帧在衔接之后又重生过),shots 是「与上一镜的缝有问题」的那一镜。出视频前修最便宜——视频按首帧生成,' +
       '首帧与上镜尾帧对不上,成片就是一次跳切。修法看 action(整集 chain_frames 先 dry_run;单道 chain_shot_from_prev / chain_shot_from)。' +
       '★有相邻镜时响应还带 seam_direction_advisory(提示性,不影响 review_token):相邻镜方向对照(主体跳边/运动反向/景别跳级)的已有结论;' +
-      '还没观察过的接缝要先 audit_seam_directions dry_run 报价,客户同意后再执行。' + UNCHAINED_SEAM_HINT + AGENT_QC_HINT,
-    { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG },
-    async ({ episode_id, base_review_token }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/frames`, base_review_token ? { base_review_token } : undefined)),
+      '还没观察过的接缝要先 audit_seam_directions dry_run 报价,客户同意后再执行。' + UNCHAINED_SEAM_HINT + REVIEW_PAGE_HINT + AGENT_QC_HINT,
+    { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG, ...REVIEW_PAGE_ARGS },
+    async ({ episode_id, base_review_token, ...page }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/frames`, reviewBody(base_review_token, page))),
   )
   server.tool(
     'review_assets',
@@ -1220,9 +1254,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★出完定妆图、设定图、场景图、道具图后都调一次;generate_frames / generate_shot_frame 之前必须审过——' +
       '把返回的 review_token 作为 **asset_review_token**,连同分镜层的 review_token 一起传(两张都要)。' +
       '只看资产本身:出完镜头图不会让它失效;换了定妆图/场景图/道具图会失效,复审即可(免费、秒级)。' +
-      'findings 逐条讲给客户(code=问题类型、names=哪个角色/场景/道具、shots=影响的镜号、action=该调哪个工具修)。' + AGENT_QC_HINT,
-    { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG },
-    async ({ episode_id, base_review_token }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/assets`, base_review_token ? { base_review_token } : undefined)),
+      'findings 逐条讲给客户(code=问题类型、names=哪个角色/场景/道具、shots=影响的镜号、action=该调哪个工具修)。' + REVIEW_PAGE_HINT + AGENT_QC_HINT,
+    { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG, ...REVIEW_PAGE_ARGS },
+    async ({ episode_id, base_review_token, ...page }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/assets`, reviewBody(base_review_token, page))),
   )
   server.tool(
     'review_videos',
@@ -1232,9 +1266,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★出完视频、配音(generate_tts)、配乐后都调一次;compose_episode 之前必须审过,带返回的 review_token。' +
       '\n' + PRE_COMPOSE_CHECK_HINT + '返回体的 pre_compose_checks 是同一份清单(结构化,逐项 tool/scope/when/cost)。\n' +
       '更细的检查(要解码画面/音轨)另有 scan_intra_shot_cuts / scan_dialogue_coverage / audit_silent_shot_audio;拼完成片再跑 review_final_cut。' +
-      '★返回带 post_production_advisory = 剧本标注「后期」的叙事必需特效还没处理(平台不会合成):原样告诉客户,用 get_post_production_checklist 看清单。' + AGENT_QC_HINT,
-    { episode_id: z.number().int().positive() },
-    async ({ episode_id }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/videos`)),
+      '★返回带 post_production_advisory = 剧本标注「后期」的叙事必需特效还没处理(平台不会合成):原样告诉客户,用 get_post_production_checklist 看清单。' + REVIEW_PAGE_HINT + AGENT_QC_HINT,
+    { episode_id: z.number().int().positive(), ...REVIEW_PAGE_ARGS },
+    async ({ episode_id, ...page }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/videos`, reviewBody(undefined, page))),
   )
   server.tool(
     'submit_qc_report',
@@ -1732,7 +1766,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'create_wardrobe',
     '新建一件服装资产(免费,纯文本写库)。建好之后要**绑到镜头上**才会影响出图——'
-      + '用 apply_wardrobe_timeline / apply_wardrobe_appearances,或在官网逐镜挑。',
+      + '用 apply_wardrobe_timeline / apply_wardrobe_appearances,或在官网逐镜挑。\n'
+      + '★建好时**没有参考图**(除非你传了 reference_image_urls):出图只能照文字猜这身衣服,review_assets 会报 binding_wardrobe_no_image。'
+      + '客户同意后接着调 regenerate_wardrobe_image 出服装图(**收费**,图片步按用量后付);客户自有服装图就用 update_wardrobe 填 reference_image_urls(免费)。'
+      + '回执里没带参考图时会给 next_step,照它讲给客户。',
     {
       drama_id: z.number().int().positive(),
       name: z.string().describe('这件服装叫什么(角色在剧里的某一身)'),
@@ -2861,7 +2898,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       + '重新拆镜或改转场都没用。engine_suspect=true 表示本剧引擎是已知高发源(WAN),'
       + '实测 WAN 11/12 镜有镜内跳切、Seedance 1/6、H3 0/5,且提示词层拦不住(负向约束已在其中)——'
       + '先复核实际切点与叙事意图，再决定调整切分还是重新生成；不要因扫描告警直接重试收费生成。'
-      + '普通镜内多切统计仍排除组模式与显式蒙太奇；但组切分后的单段不能豁免片尾检查，需另看 shots_with_terminal_cuts/detail.terminal_cut。',
+      + '★组视频切出来的段也扫(每段仍应是一个连续镜头):detail.mode=group_segment,切口两侧 0.35 秒内的切点是切分对位误差,单列 edge_cut_times_s、不计入 cuts;group_segments_scanned 列出哪几镜是组段。显式蒙太奇镜仍跳过。'
+      + '★probe_failed 的镜看 probe_errors[{shot, code, detail}]:download_failed=取不到视频(链接失效/过期/网络)、scene_probe_failed=解码失败、duration_probe_failed=读不到视频流时长;'
+      + '探测失败≠没有跳切,先按 detail 处理(多为瞬时,稍后重扫,免费),别据此判定画面没问题。'
+      + 'Seedance 首尾帧模式也可能在单镜内自行硬切,一样会被扫出来。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) =>
       jsonResult(await client.produceGet(`/episodes/${episode_id}/intra-shot-cuts`)),
@@ -3673,7 +3713,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'get_scenes',
-    '读某一集的场景列表(名字/描述/场景图是否就绪)。免费。',
+    '读某一集的场景列表。免费。每条带 id、location(地点名)、time(时段)、has_image(场景图是否就绪)、status。' +
+      '★分镜表导入(import_storyboard_table / bulk_import_storyboards)按场景头的地点与时段**逐字**绑定场景——写表前从这里抄 location / time,不用逐个调 get_scene_prompt。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/scenes`)),
   )

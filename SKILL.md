@@ -796,6 +796,11 @@ content that will be rejected.
     platform error (only the user's explicit OK + `acknowledge_review: true`
     lets it through). Relay your QC findings to the user verbatim. Listing a
     `ref` you never opened is signing off on the user's money.
+    If a review (or `get_storyboards`) response is too large for your tool
+    result limit, pass `materials_view: "summary"` (for `get_storyboards`:
+    `view: "summary"`) first, then page with `materials_offset` /
+    `materials_limit` (`offset` / `limit`). Re-calling is free; the token still
+    covers every material, so `inspected` must list all refs across pages.
 
     **Check action and camera movement against the user's own script, not
     against the platform's description.** Shot materials carry `shot_spec`
