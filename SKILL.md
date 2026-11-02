@@ -443,7 +443,13 @@ content that will be rejected.
    that stays self-consistent with the character profiles and storyboards built
    from it. Pasting your own script straight into `edit_rewritten_script` to
    skip the rewrite gets a 400 (no rewritten draft exists to edit), and
-   `extract_assets` likewise requires the rewritten draft. After the rewrite,
+   `extract_assets` likewise requires the rewritten draft. While the drama's
+   `auto_derive_assets` setting is on (the default), `extract_assets` also
+   auto-generates a prop sheet for every described prop that has no image —
+   billed per image with no separate quote — followed by an automatic prop
+   shape analysis; tell the customer before extracting, and if they want to
+   quote first, call `update_project_settings(auto_derive_assets=false)` and
+   then `generate_prop_sheet` per prop. After the rewrite,
    make every change in the AI output's structured format: polish the draft with
    `edit_rewritten_script`, edit character profiles with `update_character`,
    edit shots with `update_shot` / `replace_shot_dialogue` — never rewrite the

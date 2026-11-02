@@ -160,8 +160,15 @@ const ASSET_QC_HINT =
  * 2026-10-26 客户实测:账单里冒出没提示过的检查费,且道具那笔曾被标成「产品画面分析」。
  */
 const PROP_IMAGE_AUTO_CHECKS_HINT =
-  '\n★【出图后自动检查·按用量后付】道具图落库(AI 出图或上传)后,平台会自动做一次道具外形分析(看图补尺寸提示,账单名「道具外形分析」),' +
+  '\n★【出图后自动检查·按用量后付】道具图落库(AI 出图或上传)后,平台会自动做一次道具外形分析(看图补尺寸提示,账单名「道具外形分析」;' +
+  '剧级 auto_derive_assets=false 时 AI 出图后不再自动分析,上传换图仍会重算尺寸),' +
   '灰度阀开时还会自动做一次道具时代审核(结果见 get_props 的 era_audit)。两笔都是小额视觉审核,事先告诉客户;别再手动 audit_prop_era 重复付费。'
+/** 剧级 auto_derive_assets 管哪些自动动作、关掉的代价(update_project_settings 的描述与参数共用)。 */
+const AUTO_DERIVE_ASSETS_EFFECT =
+  '开着时 extract_assets 提取完会自动给有描述、还没有图的道具逐件出道具图(按张计费,不单独报价),图落库后再自动做一次道具外形分析(小额后付);' +
+  '拆分镜/导入分镜落库后也会自动补全分镜空字段、服装时间线与道具标注(文本步后付)。' +
+  'false=这些自动动作都不跑,道具照常落库但没有图,要图用 generate_prop_sheet 逐件出(或 upload_prop_sheet 传自有图),' +
+  '缺的辅助资产要手动补;已生成的内容不受影响。客户想先看报价再出图、或不想要平台自动出的道具图时关掉。'
 /** 角色外貌 / 道具描述改动后平台自动跑的设定一致性检查(防抖合并,同值保存不触发)。 */
 const SETTING_LINT_AUTO_HINT =
   '约 5 分钟后会自动做一次设定一致性检查(文本后付,账单名「设定一致性检查」;同一部剧 5 分钟内多次改动合并成一次,同值保存不触发)'
@@ -812,7 +819,11 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★分钟级后台任务;用 get_run_status 判断是否还在跑,别拿 60 秒当失败判据。' +
       REVIEW_GATE_HINT('review_script', '改写稿') + WORKFLOW_HINT +
       '\n★【完成后质检】提取完用 get_characters / get_scenes / get_props 核对档案(名字、外貌、时代)与客户剧本一致;' +
-      '定妆图/设定图/场景图/道具图出完后由 review_assets 统一审覆盖与质量。' + PROP_IMAGE_AUTO_CHECKS_HINT,
+      '定妆图/设定图/场景图/道具图出完后由 review_assets 统一审覆盖与质量。' +
+      '\n★【提取时自动出道具图·按张计费】剧级 auto_derive_assets 开着(默认)时,提取完平台会自动给有描述、还没有图的道具逐件出道具图,' +
+      '按道具张数计费、不单独报价,回执的 prop_sheets_auto_triggered 是这次自动发起的张数;每张图落库后还会自动做一次道具外形分析。' +
+      '调用前把这一点告诉客户;客户想先看报价或不要自动出图,先 update_project_settings(auto_derive_assets=false) 再提取,之后按需 generate_prop_sheet。' +
+      PROP_IMAGE_AUTO_CHECKS_HINT,
     { episode_id: z.number().int().positive(), ...REVIEW_ARGS },
     async ({ episode_id, review_token, acknowledge_review, auto_acknowledge }) =>
       jsonResult(await client.producePost(`/episodes/${episode_id}/extract`, { review_token, acknowledge_review, auto_acknowledge })),
@@ -2151,9 +2162,12 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '⚠️ 世界观 Brief/族裔/画幅/一致性锚等改后,已生成的内容不会自动更新,需重生对应内容。' +
       '★aspect_ratio 除固定档外可设自由宽高比(数值如 2.35,只支持 Seedance 2.5 + Seedream + 非 4k、按剧灰度,未开通回 400),详见该参数说明。' +
       '★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);' +
-      'reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。',
+      'reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。' +
+      '★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):' + AUTO_DERIVE_ASSETS_EFFECT,
     {
       drama_id: z.number().int().positive(),
+      auto_derive_assets: z.boolean().optional().describe(
+        '整剧自动补齐辅助资产开关(默认 true)。' + AUTO_DERIVE_ASSETS_EFFECT + '当前值见 get_drama 的 auto_derive_assets。'),
       frame_chain_mode: z.enum(['off', 'strict', 'reframe']).optional().describe(
         '整剧跨镜帧链模式:off=整剧不做(含出帧落定后的自动衔接与 chain_frames)/strict=相邻缝只裸拷贝上镜尾帧(首尾呼应仍会重生计费)/reframe=默认。' +
         '关掉后想用 chain_frames 先改回 reframe 或 strict;改了不会自动重出已有帧。当前值见 get_drama 的 frame_chain_mode。'),
@@ -3677,7 +3691,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'get_drama',
-    '读一部剧的详情(设定/角色数/场景数/资产统计等)。免费。frame_chain_mode = 整剧跨镜帧链模式(off/strict/reframe,改用 update_project_settings)。',
+    '读一部剧的详情(设定/角色数/场景数/资产统计等)。免费。frame_chain_mode = 整剧跨镜帧链模式(off/strict/reframe,改用 update_project_settings);' +
+      'auto_derive_assets = 整剧自动补齐辅助资产开关(1 开 / 0 关;开着时 extract_assets 会自动出道具图计费,改用 update_project_settings)。',
     { drama_id: z.number().int().positive() },
     async ({ drama_id }) => jsonResult(await client.produceGet(`/dramas/${drama_id}`)),
   )
