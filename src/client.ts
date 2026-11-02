@@ -10,7 +10,7 @@
  *   - 返回给模型的下载链接只能是我方 COS 预签名 URL(服务端已保证,这里不转发
  *     任何厂商直链字段)。
  */
-import { createReadStream, statSync } from 'node:fs'
+import { createReadStream, readFileSync, statSync } from 'node:fs'
 import { basename } from 'node:path'
 import { Readable } from 'node:stream'
 import { assertSafeLocalMediaPath } from './path-guard.js'   // v0.1.37 — P0③ 路径安全闸
@@ -30,9 +30,40 @@ const AUTH_BASE = process.env.STARREEL_AUTH_BASE ?? 'https://api.shortreelai.com
 // 而 loc() 会带 Bearer token 发请求——默认值指向不受控主机 = 把客户令牌送出去。必须显式配置。
 const LOC_BASE = process.env.STARREEL_LOC_BASE?.trim() || ''
 
+// 换 token 时自报身份(2026-11-02):管理后台据此显示「MCP 包版本 / 本机系统 / 哪个 AI agent 在用」。
+// 只带在换 token 那一个请求上——服务端只在 /v1/agent/token 落记录,业务请求不必多带头。
+const MCP_VERSION: string = (() => {
+  try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version || '0' }
+  catch { return '0' }
+})()
+const MCP_USER_AGENT = `starreel-mcp/${MCP_VERSION} (${process.platform}; ${process.arch}; node ${process.version})`
+
+/** clientInfo 是对端自报的任意字符串:剥控制字符、限长,防头注入。 */
+function headerSafe(v: unknown, max: number): string {
+  return String(v ?? '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, max)
+}
+
+export type AgentInfo = { name?: string; version?: string } | undefined
+
 export class StarReelClient {
   private token: string | null = null
   private tokenExpiresAt = 0 // epoch ms
+  private agentInfo: () => AgentInfo = () => undefined
+
+  /** index.ts 接 McpServer 的 clientInfo(initialize 后才有值,所以取值延迟到换 token 时)。 */
+  setAgentInfoProvider(fn: () => AgentInfo): void { this.agentInfo = fn }
+
+  private tokenHeaders(): Record<string, string> {
+    const h: Record<string, string> = { 'content-type': 'application/json', 'user-agent': MCP_USER_AGENT }
+    let info: AgentInfo
+    try { info = this.agentInfo() } catch { info = undefined }
+    const name = headerSafe(info?.name, 80)
+    if (name) {
+      const ver = headerSafe(info?.version, 38)
+      h['x-starreel-agent'] = ver ? `${name}/${ver}` : name
+    }
+    return h
+  }
 
   constructor(private readonly apiKey: string) {
     if (!apiKey?.startsWith('srk_')) {
@@ -45,7 +76,7 @@ export class StarReelClient {
     if (this.token && Date.now() < this.tokenExpiresAt - 60_000) return this.token
     const res = await fetch(`${AUTH_BASE}/v1/agent/token`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: this.tokenHeaders(),
       body: JSON.stringify({ api_key: this.apiKey }),
     })
     if (!res.ok) {

@@ -36,6 +36,8 @@ const server = patchToolDescriptions(
   new McpServer({ name: 'starreel', version: '0.1.0' }, { instructions: instructionsFor(buildInstructions()) }),
 )
 const client = new StarReelClient(apiKey)
+// 换 token 时把对端 agent 的 clientInfo(如 claude-code / cursor)报给服务端,管理后台显示「通过哪个 AI agent 使用」
+client.setAgentInfoProvider(() => server.server.getClientVersion())
 registerGuideTools(server)             // 功能地图(免费·本地·不联网):什么情况下该用哪个工具
 registerProduceTools(server, client)   // 短剧编排产线(需 produce scope)——从剧本到成片
 // 出海本地化工具:translator worker 暂时离线(2026-08),发布版先不注册,免得客户拿到只会
