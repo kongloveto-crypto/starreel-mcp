@@ -259,7 +259,7 @@ export const WORKFLOW_HINT =
   '注意它的 not_covered——剧级跳过唯一要看图的那道 lint,「全剧 0 条」≠「全查过了」。' +
   '★揪出来之后别自己盲改:plan_precheck_fix 让平台算出提案 → apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳') + ';' +
   '分镜后跑 get_health_report;定妆图出完用 get_characters 核对每个出场角色都有 image/sheet;' +
-  '出帧后用 get_storyboards 看 frame_status 与 fail_reason/fail_hint(failed 的镜先修再往下,别带着废帧出视频);' +
+  '出帧后用 get_storyboards 看 frame_status 与 fail_reason/fail_hint(failed 的镜先修再往下,别带着废帧出视频;对客户转述用 frame_status_label,别说「失败」);' +
   '出视频后同样看 video_status;成片前用 get_pipeline_status 确认没有缺镜。' +
   '★**禁止一路 generate 到底**:不审查就连推的做法,问题会在每一层被放大,最后整集废掉重来——' +
   '而重来的每一次出图/出视频都是真扣费。审查全部免费,拦下来一分钱不花。' +
@@ -354,7 +354,7 @@ export const WORKFLOW_HINT =
   '客户看到的就是「凭空多出一个人」。要长表演请拆成多个短镜再靠帧链衔接,别写 15 秒以上的单镜;' +
   '【分辨率决策】草稿/迭代期:WAN 剧 480p(约0.2×最省)、其余 720p;成片交付:seedance 剧 720p(要高清交付选 1080p,约 720p 的 2.5 倍)、hailuo-3 剧 1080p(=2K·约0.53×)、WAN 剧 1080p(约0.8×);hailuo-3 无独立 480p 档(选了也按 768P 计费);' +
   'create_drama/update_project_settings 的 video_engine/video_resolution 设,★都必须在出视频前定——切换不回溯已生成镜头,同剧混用会画风/身份漂移。' +
-  '★图片生成慢≠失败:每张几十秒~数分钟、整集可能十几分钟,轮询 get_storyboards 看 frame_status——pending=还在生成(耐心等、别重复调 generate_frames 白花钱)、ready=完成、failed=才是真失败。' +
+  '★图片生成慢≠失败:每张几十秒~数分钟、整集可能十几分钟,轮询 get_storyboards 看 frame_status——pending=还在生成(耐心等、别重复调 generate_frames 白花钱)、ready=完成、failed=没出成(对客户转述用 frame_status_label,如「未通过质检」,别说「失败」)。' +
   '★改某一镜画面 / 换定妆图后要让新图生效,走**单镜重生 generate_shot_frame**(平台自动带该镜身份锚·场景道具参考·画风锚,保全片一致);' +
   'generate_frames 只批量补「缺帧」的镜、已有首帧的镜跳过(正常、不是"拒绝")。★首帧出完调免费的 tail_frame_plan 看哪几镜要独立尾帧,再 frame_type=last_frame 批量补。换定妆图(set_character_portrait)后响应里的 stale_frames 就是被旧图污染、需逐镜重生的镜。' +
   '★绝不用外部工具自制首尾帧再 upload_shot_frame 来"改画面"——外部图无身份锚/画风锚,人物·服装·画风必漂,那才是废片根源;upload_shot_frame 只用于客户自有真实素材。' +
@@ -1028,6 +1028,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '核对「台词有没有丢/谁说的/关键镜是哪几镜/情绪曲线」用这一次调用即可,不用逐镜拉;update_shot 改完台词也在这里核对。' +
       '画面/视频/首尾帧提示词仍只在 get_shot_prompts 逐镜读。' +
       '★每镜还带**结构化状态**:frame_status/video_status(ready/pending/authorizing/rejected/failed/none/not_required)、' +
+      '★frame_status_label=帧未就绪时**对客户的说法**(未通过质检 / 未通过内容审核 / 随批结束 / 未出图 / 人脸授权中;帧就绪或在生成时为 null),full 与 view=summary 都带:' +
+      '向客户转述镜头图状态一律用它,别照 frame_status=failed 说「失败」(多数是图已出但没通过质检、未采用);判下一步分支仍看 frame_status / fail_reason / retryable。' +
       '★video_status=ready 只表示视频已生成，不等于画面验收通过。video_quality_issues 若含 terminal_cut：' +
       'status=suspected 表示片尾疑似短促切镜，cut_at_s/tail_duration_s 给出位置；status=unavailable 表示探测未完成，不能当检测通过。' +
       '两者均暂停本次自动尾帧回写与续接，先复核视频；字段缺席不代表做过检测，也不要直接重试收费生成。' +
@@ -1446,7 +1448,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '确认后批量出帧:后台异步。用 get_storyboards 轮询,first_frame_image/last_frame_image 逐镜填充即完成。' +
       '★图片生成较慢——每张几十秒到数分钟(尤其高清模型),整集可能十几分钟。轮询看 frame_status:' +
       '**pending=还在生成(继续耐心等,别当失败、别重复调 generate_frames,重复触发=白花钱)**、' +
-      'ready=完成、failed=才是真失败。别因为「等了一会儿还没出」就判定生成失败或重试。' +
+      'ready=完成、failed=才是真没出成(对客户转述用 frame_status_label——多为「未通过质检」「未出图」,别照枚举说「失败」;判分支仍看 fail_reason/retryable)。别因为「等了一会儿还没出」就判定生成失败或重试。' +
       '出视频前必须先出帧,否则视频会退化成无一致性锚点的画面。' +
       '★**出帧前先把两个锚备齐**:定妆图(generate_portraits_and_sheets,锚人)与' +
       '空景基板(generate_scene_images,锚景)。缺基板不会拦你,但每个场景的第一镜会没有背景锚' +

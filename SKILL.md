@@ -690,7 +690,10 @@ content that will be rejected.
    **Images are slow** (tens of seconds to minutes each; a whole episode can take
    10+ min): poll `get_storyboards` and read `frame_status` — `pending` = still
    generating (keep waiting, NEVER re-call generate_frames — that double-charges),
-   `ready` = done, `failed` = the only real failure. Never treat a slow image as failed.
+   `ready` = done, `failed` = the only case it was really not produced. Never treat a slow image as failed.
+   When telling the customer, use the shot's `frame_status_label` (e.g. 未通过质检 /
+   未出图) — never say "failed" from the enum; keep branching on `frame_status` /
+   `fail_reason` / `retryable`.
 
    **Redraw on-platform, never off-platform.** When a shot's image is wrong,
    fix it with `quote_shot_frame` → `generate_shot_frame` (`frame_type`:
@@ -1094,7 +1097,11 @@ Failures surface as a human-readable `message` (MCP throws `Error(message)`;
 REST returns `{ code, message }`, or on `/v1/ai/*`:
 `{ error: { message, type, needed?, retryable? } }`). Per-shot, `get_storyboards`
 gives structured `frame_status` / `video_status` / `fail_reason` / `retryable` /
-`fail_hint`. A status of `not_required` marks a narration/end-card shot: its frame
+`fail_hint`, plus `frame_status_label` (both full and `view=summary`): the
+customer-facing wording for a frame that is not ready — 未通过质检 (failed QC) /
+未通过内容审核 (failed content review) / 随批结束 (ended with its batch) / 未出图
+(not produced) / 人脸授权中 (face authorization pending). Relay frame status to the
+customer with it, never "failed"; branch on the enums. A status of `not_required` marks a narration/end-card shot: its frame
 and video are rendered by the final-cut layer — count it as done, never retry it.
 Map the reason to an action:
 
