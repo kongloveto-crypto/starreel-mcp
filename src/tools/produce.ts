@@ -507,6 +507,11 @@ function buildEthnicityLock(ethnicity?: string, note?: string): Record<string, u
   return ethnicity === 'custom' ? { code: 'custom', note: note ?? '' } : { code: ethnicity }
 }
 
+const FIRST_FRAME_NOT_DELIVERED_HINT =
+  '★响应带 first_frame_not_delivered 时,列出的镜首帧整集出视频时**不送进视频**(reason=group_unit:场景组不是关键帧组,只送组头首帧,group_head_shot 是组头;' +
+  'extension:续拍以上一镜视频为参考),只当审片/接缝的画面参考——花在这些首帧上的点数不进成片画面,与 quote_videos 的 frame_delivery 同一判据,先原样告诉客户。' +
+  '关键帧组(Seedance 2.5 引擎)的组员首帧会作为组关键帧送达,不在清单里。'
+
 export function registerProduceTools(server: McpServer, client: StarReelClient) {
   // ---------- 建剧前:列可选项 ----------
   server.tool(
@@ -1258,7 +1263,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       'seam_broken(接过但没接上,或上一镜尾帧在衔接之后又重生过),shots 是「与上一镜的缝有问题」的那一镜。出视频前修最便宜——视频按首帧生成,' +
       '首帧与上镜尾帧对不上,成片就是一次跳切。修法看 action(整集 chain_frames 先 dry_run;单道 chain_shot_from_prev / chain_shot_from)。' +
       '★有相邻镜时响应还带 seam_direction_advisory(提示性,不影响 review_token):相邻镜方向对照(主体跳边/运动反向/景别跳级)的已有结论;' +
-      '还没观察过的接缝要先 audit_seam_directions dry_run 报价,客户同意后再执行。' + UNCHAINED_SEAM_HINT + REVIEW_PAGE_HINT + AGENT_QC_HINT,
+      '还没观察过的接缝要先 audit_seam_directions dry_run 报价,客户同意后再执行。' +
+      FIRST_FRAME_NOT_DELIVERED_HINT + '这些镜首帧有小问题不必重画(重画不改变视频画面),先看组头 / 送得到的镜。' +
+      UNCHAINED_SEAM_HINT + REVIEW_PAGE_HINT + AGENT_QC_HINT,
     { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG, ...REVIEW_PAGE_ARGS },
     async ({ episode_id, base_review_token, ...page }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/frames`, reviewBody(base_review_token, page))),
   )
@@ -1401,6 +1408,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '仍在 ready/pending 里,但标 tail_delivered=false——此镜尾帧不会送达视频,先跟客户说清再出。' +
       '拿到 ready 清单后:quote_frames + generate_frames 带 frame_type=last_frame 即可批量补。' +
       '★尾帧补完(或本工具报 0)之后的下一步是接缝:chain_frames(dry_run:true) 看计划与预估、客户确认后执行,再 review_frames。' +
+      FIRST_FRAME_NOT_DELIVERED_HINT +
       '★跳过尾帧不会报错,但那些镜出视频时只有首帧一个锚,末态由模型自由发挥——' +
       '动作做不到位、大运镜结束又回到起点构图,多半就是这么来的。零扣费,可随时调。',
     { episode_id: z.number().int().positive() },
@@ -1414,14 +1422,18 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '打算在 generate_frames 里临时换模型,报价时就要把同一个 image_model 传进来,否则两边不是一个价。' +
       '★两边必须传同一个 image_model —— 不一致会被直接拒(400 IMAGE_MODEL_MISMATCH),因为模型决定计费档,不同源就是「预估≠扣费」。两边都不传也算一致(用该剧设定的模型)。已下架的型号(FLUX 全系列)一律拒收,别再传。' +
       '★响应带 frame_contract_advisory 时,列出的镜构图契约(画面里几人、主体是人物还是局部/道具)可能已过期或与绑定矛盾——出图仍按旧契约来;先讲给客户,同意后对这些镜调 rederive_shot_contract 再重新报价。' +
+      FIRST_FRAME_NOT_DELIVERED_HINT +
+      '客户只想为送得到视频的首帧付费时,带 first_frame_scope:\'delivered_only\' 重新报价(这些镜不出首帧、也不出尾帧;generate_frames 按报价时的范围出,不用再传)。' +
+      '代价:它们没有首帧就没有审片画面;之后改分镜 / 换引擎让场景组拆开,这几镜改逐镜出视频,届时 quote_videos 会报 no_first_frame,要先补首帧。' +
       QUOTE_RANGE_HINT,
     {
       episode_id: z.number().int().positive(),
       frame_type: FRAME_TYPE_ARG.optional().describe('默认 first_frame;last_frame=补尾帧;both=首尾都补'),
       image_model: z.string().optional().describe('按这个模型报价(★须与随后 generate_frames 传的一致,否则 generate 会 400;不传=用 drama 级设定,默认 ChatGPT Image 2.5 Flare)'),
+      first_frame_scope: z.enum(['all', 'delivered_only']).optional().describe("默认 all=所有缺首帧的镜都出;delivered_only=只出整集出视频时送得到的首帧(first_frame_not_delivered 里的镜不出)。generate_frames 跟随报价"),
     },
-    async ({ episode_id, frame_type, image_model }) =>
-      jsonResult(await client.producePost(`/episodes/${episode_id}/frames/quote`, { frame_type, image_model })),
+    async ({ episode_id, frame_type, image_model, first_frame_scope }) =>
+      jsonResult(await client.producePost(`/episodes/${episode_id}/frames/quote`, { frame_type, image_model, first_frame_scope })),
   )
   server.tool(
     'generate_frames',
@@ -1445,6 +1457,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★响应里的 frames_planned 是**计划数,不是已成功数**——本接口在后台派发循环开跑之前就返回了。' +
       '真实进度只看 get_storyboards 的 first_frame_image / get_jobs 的逐条生成记录;' +
       '余额不足(402)会中止整批,此时轮询再久也不会有结果,应去查余额而不是继续等。' +
+      '首帧范围(first_frame_scope)跟随报价,不用再传。' +
       '★★**个别镜反复出不来、其余镜都好了**:那不是等得不够久,是这几镜被内容闸连拒。' +
       '看 get_storyboards 的 fail_reason(repeat_rejected / diagnosis_required / needs_content_fix / contract_rejected),' +
       '若 diagnosis_required,先按 fail_hint 诊断已有候选;审计错误先重审,证据不足先复核,不要原样重抽或擅自改剧本。' +
@@ -1484,6 +1497,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★响应带 frame_contract_advisory 时,列出的镜构图契约(画面里几人、主体是人物还是局部/道具)可能已过期或与绑定矛盾——出图仍按旧契约来;先讲给客户,同意后对这些镜调 rederive_shot_contract 再重新报价。' +
       '★出首帧(first_frame/both)时响应带 continuity:follows_previous_shot=true 表示上一镜尾帧会钉在参考图第 1 位(承接上一镜的人物、姿势与机位),note 说明原因。' +
       '这一镜不该接上一镜(跳切、换场、只拍手/道具的局部特写等),报价与生成都带 continuity_mode:\'independent\'。' +
+      '★响应带 first_frame_not_delivered 时,本镜首帧整集出视频时不送进视频(场景组只送组头首帧 / 续拍),重出只改审片与接缝参考、不改视频画面——先告诉客户再确认。' +
+      '★auto_chain_after_frame.will_fire=false:单镜出帧 / 采用落定后平台不会自动重画相邻镜首帧;要接缝走 chain_frames(先 dry_run 报价)。' +
       QUOTE_RANGE_HINT,
     {
       storyboard_id: z.number().int().positive(),
@@ -1800,6 +1815,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       notes: z.string().optional(),
       product_id: z.number().int().positive().optional().describe('带货场景:关联商品'),
       sort_order: z.number().int().optional(),
+      absent_prop_ids: z.array(z.number().int().positive()).optional().describe('穿这件时**不带**的招牌道具 id(本角色自己的,get_props 查 id)。剧情里道具被打掉/丢了之后那几镜绑这件服装,出图/出视频就不再注入该道具的参考图与文字锚;不用在首帧描述里手写「手上空空」去压。只对道具归属角色==本服装所属角色生效。update 时传 [] 清空'),
     },
     async (args) => jsonResult(await client.producePost('/wardrobe', args)),
   )
@@ -1824,6 +1840,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       notes: z.string().optional(),
       product_id: z.number().int().positive().optional(),
       sort_order: z.number().int().optional(),
+      absent_prop_ids: z.array(z.number().int().positive()).optional().describe('穿这件时**不带**的招牌道具 id(本角色自己的,get_props 查 id)。剧情里道具被打掉/丢了之后那几镜绑这件服装,出图/出视频就不再注入该道具的参考图与文字锚;不用在首帧描述里手写「手上空空」去压。只对道具归属角色==本服装所属角色生效。update 时传 [] 清空'),
     },
     async ({ wardrobe_id, ...fields }) =>
       jsonResult(await client.producePut(`/wardrobe/${wardrobe_id}`, fields)),
@@ -4286,9 +4303,18 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'mark_signature_prop',
-    '标记/取消「招牌道具」(会在多镜复现的关键道具,加强一致性追踪)。signature=false 取消。免费。',
-    { prop_id: z.number().int().positive(), signature: z.boolean().optional().describe('默认 true 标记;false 取消') },
-    async ({ prop_id, signature }) => jsonResult(await client.producePost(`/props/${prop_id}/signature`, { signature: signature !== false })),
+    '标记/取消「招牌道具」(会在多镜复现的关键道具,加强一致性追踪)。signature=false 取消。免费。'
+      + '剧情里道具被打掉/丢失之后的镜头:给角色建一件 absent_prop_ids 含该道具的服装(create_wardrobe / update_wardrobe)并绑到那几镜,招牌道具就不再强制注入。',
+    {
+      prop_id: z.number().int().positive(),
+      signature: z.boolean().optional().describe('默认 true 标记;false 取消'),
+      character_id: z.number().int().positive().nullable().optional()
+        .describe('招牌道具归属哪个角色(只在该角色出镜的镜头注入);null 解绑;不传不改。服装 absent_prop_ids 只能压掉归属本角色的招牌道具,get_props 的 signature_character_id 为空时先用它设上'),
+    },
+    async ({ prop_id, signature, character_id }) => jsonResult(await client.producePost(`/props/${prop_id}/signature`, {
+      signature: signature !== false,
+      ...(character_id !== undefined ? { character_id } : {}),
+    })),
   )
   server.tool(
     'get_color_scripts',
@@ -4415,13 +4441,20 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '剧级 frame_chain_mode=off 时整集不接(计划为空),要接先 update_project_settings 改回 reframe/strict。' +
       '执行后改了首帧的镜若已有视频会被标为待重生。★执行只派发 reframe、不等出图:用 get_jobs 看这些镜的 first_frame 出图行,' +
       '等 pending/processing 全部结束(failed 的看 error_msg,单道用 chain_shot_from 重接;旧首帧还在时 get_storyboards 的 frame_status 仍是 ready、看不出失败),' +
-      '再用 get_storyboards 核对 seam_state、review_frames——提前审会审到旧首帧,token 随后作废。',
+      '再用 get_storyboards 核对 seam_state、review_frames——提前审会审到旧首帧,token 随后作废。\n' +
+      '★**被晋升闸拒掉的 reframe 照常计费**。dry_run 的 reject_risk_advisory 先讲给客户:' +
+      'skipped 里 reason=rejected-same-anchor 的缝上次在同一张锚上已被拒,默认不重派、不计价(客户确认要重掷才 dry_run 与执行都带 retry_rejected:true,同类拒因盲重掷约三成能成);' +
+      'planned_actions 里 reject_risk=elevated 的道目标镜首帧近 30 天被拒多于成功(拒因见 reject_history),大概率同样被拒,先按拒因修分镜 / 人物档案;' +
+      'target_first_frame_delivered=false 的道目标镜首帧不送进视频(场景组只送组头首帧 / 续拍),重画只改审片参考,通常不值得花这张图。',
     {
       episode_id: z.number().int().positive(),
       dry_run: z.boolean().optional().describe('true=只看计划与预估(免费,推荐先调一次);不传=真执行'),
+      retry_rejected: z.boolean().optional().describe('true=同一张锚上次已被拒的缝也重派(默认跳过);须客户确认,dry_run 与执行传同一个值'),
     },
-    async ({ episode_id, dry_run }) =>
-      jsonResult(await client.producePost(`/episodes/${episode_id}/chain-frames`, dry_run ? { dry_run: true } : {})),
+    async ({ episode_id, dry_run, retry_rejected }) =>
+      jsonResult(await client.producePost(`/episodes/${episode_id}/chain-frames`, {
+        ...(dry_run ? { dry_run: true } : {}), ...(retry_rejected ? { retry_rejected: true } : {}),
+      })),
   )
   // ---------- 单道接缝修复(帧时间线「接上一镜」「对齐上一镜」的门面版) ----------
   server.tool(
