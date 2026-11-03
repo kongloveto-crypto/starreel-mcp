@@ -296,13 +296,15 @@ export const PIPELINE: PipelineStep[] = [
   },
   {
     step: '7 出帧(镜头图)',
-    tools: ['run_precheck(免费,揪出必被厂商拒的镜)', 'quote_frames', 'generate_frames', 'tail_frame_plan(免费,首帧出完必调)', 'quote_shot_frame', 'generate_shot_frame(单镜重生)', 'quote_local_frame_edit', 'local_frame_edit(局部返修·只改框内,灰度剧)', 'get_local_frame_edit', 'adopt_local_frame_edit', 'chain_frames(先 dry_run:true 看计划与预估)', 'cancel_images(停批量出图:已派的照常出完扣费,未派的不再派·免费)', 'chain_shot_from_prev(免费,单道接缝)', 'quote_chain_shot_from', 'chain_shot_from', 'quote_align_prev_shot', 'align_prev_shot', 'upload_shot_frame'],
+    tools: ['run_precheck(免费,揪出必被厂商拒的镜)', 'quote_frames', 'generate_frames', 'tail_frame_plan(免费,首帧出完必调)', 'quote_shot_frame', 'generate_shot_frame(单镜重生)', 'quote_local_frame_edit', 'local_frame_edit(局部返修·只改框内,灰度剧)', 'get_local_frame_edit', 'adopt_local_frame_edit', 'chain_frames(先 dry_run:true 看计划与预估)', 'cancel_images(停批量出图:已派的照常出完扣费,未派的不再派·免费)', 'plan_shot_keyframes(可选·中间关键帧,先 dry_run)', 'quote_shot_keyframes', 'generate_shot_keyframes', 'chain_shot_from_prev(免费,单道接缝)', 'quote_chain_shot_from', 'chain_shot_from', 'quote_align_prev_shot', 'align_prev_shot', 'upload_shot_frame'],
     billing: '报价确认后扣点',
     gate: 'review_frames(镜头图审查;免费;generate_videos 前必过)',
     note: '★出帧是**两趟**:generate_frames 默认只出首帧,首帧出完必须调一次免费的 `tail_frame_plan` ' +
       '——它告诉你哪几镜需要独立尾帧(末态≠首态,判据在平台侧,你猜不出来),再 frame_type=last_frame 补上。' +
       '生产实测 32 集里 30 集整集只出了首帧,其中 23 集一路出完了视频;那些镜出视频时只有首帧一个锚,末态由模型自由发挥。' +
       'pending=还在生成,别重复调 `generate_frames`(重复扣费)。' +
+      '★可选·中间关键帧:`tail_frame_plan` / `review_frames` 回 keyframe_advisory.candidates 时,那几镜动作有多个节点、只靠首尾帧中段会由模型自由发挥——' +
+      '讲给客户、问要不要加;同意后 `plan_shot_keyframes`(dry_run:true)→ 客户确认 → 逐镜 `set_shot_keyframes` 写入确认的预览(免费;预览不写库)→ `quote_shot_keyframes` → `generate_shot_keyframes`(首帧先定稿,再出中间帧;出视频点数不变)。' +
       '★开跑前用 `get_pipeline_status` 核对 generate_scene_images 的 completed/total——缺基板照样能出帧,' +
       '但背景从每个场景的首镜起就开始漂;`review_storyboards` 也会把缺口报成 scene_plate_missing。' +
       '★首尾帧补齐后、出视频前**接缝**:逐镜出帧不会触发平台的自动帧链,镜与镜之间多半没接过。' +
@@ -432,7 +434,7 @@ export const COMMON_REQUESTS: CommonRequest[] = [
   { customer_says: '成片里话没说完 / 切太快', do: '先 `scan_dialogue_coverage` / `scan_intra_shot_cuts` 定病因,再按 qa_tools 的 then 修;别默认去加长镜头。' },
   { customer_says: '下载原图或视频到本地调色、用第三方 AI 后期', do: '`export_handoff_pack` purpose=local_color；只有图片传 media_type=images；按 local_postproduction.color_handoff 执行。' },
   { customer_says: '我想自己剪', do: '`export_handoff_pack` + `build_av_timing_contract`(音画时长契约) + `get_handoff_toolchain`,不走 `compose_episode`。' },
-  { customer_says: '做动作片 / 打斗 / 技能展示 / 这条参考动作片我们能不能做', do: '先 `get_capabilities_guide` section=action_film:资产照常走 `rewrite_script` → `review_script` → `extract_assets`,分镜改用自己写的表(`import_storyboard_table`)而不是 AI 拆镜,首帧停在起势,拖沓尾段用 `trim_shot` 剪;平台不支持镜内分段变速。' },
+  { customer_says: '做动作片 / 打斗 / 技能展示 / 这条参考动作片我们能不能做', do: '先 `get_capabilities_guide` section=action_film:资产照常走 `rewrite_script` → `review_script` → `extract_assets`,分镜改用自己写的表(`import_storyboard_table`)而不是 AI 拆镜,首帧停在起势,拖沓尾段用 `trim_shot` 剪;蓄力→命中→落地这类多节点动作可在一镜内加中间关键帧钉住关键一拍(`plan_shot_keyframes`,seedance-2.5 按秒 / kling-4.0 按顺序);平台不支持镜内分段变速。' },
   { customer_says: '我有白模 / 3D 预演视频 / 想让某镜照一段视频的动作和运镜重新生成', do: '`create_motion_reference`(白模选 kind=greybox_coarse / greybox_fine)→ `attach_motion_reference`(多个色块传 greybox_bindings 写明哪个色块是哪个角色)→ `get_shot_motion_reference` 核对 → 照常 `review_frames` → `quote_videos` → `generate_videos`。别用 `upload_shot_footage`(那是把视频直接当成片);白模别带轨迹线 / 坐标轴 / 相机锥,四肢不建或建全动作。' },
   { customer_says: '镜头景别 / 运镜 / 站位总是不听话、想先做白模预演但手上没有白模', do: '`generate_greybox_previs`(先 `dry_run=true` 看平台用了哪些字段、做了哪些假设,字段不对先 `update_shot`)→ 平台按分镜字段自动渲粗粒度白模并写好色块绑定 → `get_greybox_previs` 核对 → 照常 `review_frames` → `quote_videos` → `generate_videos`。先告诉客户:白模镜不送首尾帧、视频报价约贵两成;插入镜 / 无角色 / 超 15 秒 / 状态变化镜不适用。' },
   { customer_says: '要配音 / 不要视频原声', do: '`update_project_settings` use_clip_audio=false → `assign_voices` → `generate_tts` → `compose_episode`。' },

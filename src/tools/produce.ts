@@ -507,6 +507,12 @@ function buildEthnicityLock(ethnicity?: string, note?: string): Record<string, u
   return ethnicity === 'custom' ? { code: 'custom', note: note ?? '' } : { code: ethnicity }
 }
 
+// 中间关键帧候选提示（tail_frame_plan / review_frames 共用一段，判据在后端 shot-keyframe-advice.ts）
+const KEYFRAME_ADVISORY_HINT =
+  '★响应可能带 keyframe_advisory(只提示,不影响 review_token / 报价):candidates = 动作有多个节点、只靠首尾帧时中段会由模型自由发挥的镜'
+  + '(状态变化或关键镜、≥5 秒、引擎 seedance-2.5 / kling-4.0、结构上送得到、还没有中间帧),可选加 1~3 张中间关键帧钉住关键一拍;'
+  + '把镜号讲给客户、问要不要加,同意后 plan_shot_keyframes(dry_run:true) → 客户确认 → 逐镜 set_shot_keyframes 写入确认的预览(免费;预览不写库,不写入报价会 400) → quote_shot_keyframes → generate_shot_keyframes(首帧要先定稿)。'
+  + 'undeliverable = 值得加但结构上送不到视频的镜(场景组 / 续拍 / 2.5 严格接缝,message 是原因),别为它们出中间帧。'
 const FIRST_FRAME_NOT_DELIVERED_HINT =
   '★响应带 first_frame_not_delivered 时,列出的镜首帧整集出视频时**不送进视频**(reason=group_unit:场景组不是关键帧组,只送组头首帧,group_head_shot 是组头;' +
   'extension:续拍以上一镜视频为参考),只当审片/接缝的画面参考——花在这些首帧上的点数不进成片画面,与 quote_videos 的 frame_delivery 同一判据,先原样告诉客户。' +
@@ -1265,7 +1271,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★有相邻镜时响应还带 seam_direction_advisory(提示性,不影响 review_token):相邻镜方向对照(主体跳边/运动反向/景别跳级)的已有结论;' +
       '还没观察过的接缝要先 audit_seam_directions dry_run 报价,客户同意后再执行。' +
       FIRST_FRAME_NOT_DELIVERED_HINT + '这些镜首帧有小问题不必重画(重画不改变视频画面),先看组头 / 送得到的镜。' +
-      UNCHAINED_SEAM_HINT + REVIEW_PAGE_HINT + AGENT_QC_HINT,
+      UNCHAINED_SEAM_HINT + KEYFRAME_ADVISORY_HINT + REVIEW_PAGE_HINT + AGENT_QC_HINT,
     { episode_id: z.number().int().positive(), base_review_token: BASE_REVIEW_ARG, ...REVIEW_PAGE_ARGS },
     async ({ episode_id, base_review_token, ...page }) => jsonResult(await client.producePost(`/episodes/${episode_id}/review/frames`, reviewBody(base_review_token, page))),
   )
@@ -1408,7 +1414,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '仍在 ready/pending 里,但标 tail_delivered=false——此镜尾帧不会送达视频,先跟客户说清再出。' +
       '拿到 ready 清单后:quote_frames + generate_frames 带 frame_type=last_frame 即可批量补。' +
       '★尾帧补完(或本工具报 0)之后的下一步是接缝:chain_frames(dry_run:true) 看计划与预估、客户确认后执行,再 review_frames。' +
-      FIRST_FRAME_NOT_DELIVERED_HINT +
+      FIRST_FRAME_NOT_DELIVERED_HINT + KEYFRAME_ADVISORY_HINT +
       '★跳过尾帧不会报错,但那些镜出视频时只有首帧一个锚,末态由模型自由发挥——' +
       '动作做不到位、大运镜结束又回到起点构图,多半就是这么来的。零扣费,可随时调。',
     { episode_id: z.number().int().positive() },
@@ -1979,12 +1985,19 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'plan_shot_keyframes',
-    '★**内测**·规划**单镜中间关键帧**：给动作复杂的镜头在首帧与尾帧之间加 1~3 个「第 t 秒该是什么画面」的目标'
+    '规划**单镜中间关键帧**(按剧开放,目前全量):给动作复杂的镜头在首帧与尾帧之间加 1~3 个「第 t 秒该是什么画面」的目标'
       + '(蓄力、命中、落地等节点),让视频动作按节点走、不跳过过程。**要花钱**(走 LLM,文本按 token 后付)。'
-      + '\n★只规划视频引擎为 seedance-2.5 的镜(只有它按秒对齐关键帧,误差约 ±1 秒);时长 ≥5 秒、标为状态变化或关键镜的才会规划。'
-      + '\n★只填**空着**的镜:已经有中间关键帧的(含客户自己写的)一律不动。dry_run:true 只返回规划不写库,先给客户看。'
-      + '\n★结果用 get_storyboards 每镜的 keyframes 字段读;要改用 set_shot_keyframes。'
-      + '\n★回 400「本剧未开启」= 本剧不在内测名单,不是调用错误,别重试。规划完用 quote_shot_keyframes → generate_shot_keyframes 出中间帧图。',
+      + '\n★什么时候推荐:只靠首尾帧时中段由模型自由发挥,常见「动作跳过过程」「人物原地不动、最后瞬移到尾帧」。'
+      + 'tail_frame_plan / review_frames 返回的 keyframe_advisory.candidates 就是平台判出的候选镜——看到就讲给客户、问要不要加,别替客户决定。'
+      + '不必加:动作只是一段平滑弧线、对白 / 细微动作镜;几拍之间换机位(该 split_shot,否则镜内硬切);剧本动作本身写了瞬移(该改动作描述,中间帧压不住)。'
+      + '\n★只规划视频引擎为 seedance-2.5(按秒对齐,误差约 ±1 秒)或 kling-4.0(只保证顺序、不守秒数)、时长 ≥5 秒、标为状态变化或关键镜的镜。'
+      + '\n★结构上送不到视频的镜不规划,逐镜原因在 skippedUndeliverable:场景组组员、续拍镜、seedance-2.5 上首帧是上一镜尾帧原样拷贝的严格接缝镜'
+      + '(关键帧模式会把首帧降成软约束、接缝会断;确实要就把这一镜换成 kling-4.0,首帧仍是硬约束)。'
+      + '\n★只填**空着**的镜:已经有中间关键帧的(含客户自己写的)一律不动。dry_run:true 只返回规划不写库,先给客户看;'
+      + '客户确认后逐镜 set_shot_keyframes 写入预览里的 keyframes(免费、结果与客户看过的一致)——别再不带 dry_run 重跑(要再付一次费,LLM 结果也会变)。不写入就报价会 400。'
+      + '\n★首帧要先定稿:首帧重出后旧中间帧作废(stale,出视频不送,要重出)。结果用 get_storyboards 每镜的 keyframes 字段读;要改用 set_shot_keyframes。'
+      + '\n★规划完用 quote_shot_keyframes → generate_shot_keyframes 出中间帧图(每张按尾帧档计价;出视频点数不变)。'
+      + '回 400「本剧未开启」= 本剧没开放这项能力,不是调用错误,别重试。',
     {
       episode_id: z.number().int().positive(),
       dry_run: z.boolean().optional().describe('true = 只返回规划结果、不写库'),
@@ -1994,20 +2007,21 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'get_shot_keyframes',
-    '★**内测**·读**某一镜**的中间关键帧与可放范围。免费。'
+    '读**某一镜**的中间关键帧与可放范围。免费。'
       + '回 keyframes(每项 t_sec / prompt / source=planner|author / status)、window(min_t、max_t、相邻最小间隔 gap、本镜最多几张 cap)'
-      + '与 enabled(本剧是否在内测名单)。写之前先读这里,按 window 排秒数,再调 set_shot_keyframes。',
+      + '与 enabled(本剧是否开放这项能力)。写之前先读这里,按 window 排秒数,再调 set_shot_keyframes。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) => jsonResult(await client.produceGet(`/storyboards/${storyboard_id}/keyframes`)),
   )
   server.tool(
     'set_shot_keyframes',
-    '★**内测**·写**某一镜**的中间关键帧(整体覆盖;[] = 清空)。免费(纯文本写库)。'
+    '写**某一镜**的中间关键帧(整体覆盖;[] = 清空;已出的中间帧图随之作废)。免费(纯文本写库)。'
       + '\n每项 { t_sec, prompt }:t_sec 是镜内第几秒,必须落在 [2, 时长-1] 之内(开头会定格在首帧、结尾留给尾帧),'
       + '相邻至少间隔 2 秒,每镜最多 3 张;prompt 写那一刻**看得见的**画面(人在哪、什么姿态、物件什么状态、景别机位与首帧一致)。'
       + '\n★不收「正要 / 刚开始 / about to」这类起点措辞(单帧画不出「正在开始」),也不收「没有 X / no X」否定句'
       + '(会把 X 画出来);违规会 400 并说明哪一张哪里不对,照着改写再提交。'
-      + '\n★先 get_storyboards 读现值再改。回 400「本剧未开启」= 本剧不在内测名单。',
+      + '\n★手写不受结构过滤:场景组组员 / 续拍镜 / seedance-2.5 严格接缝镜写了也不会送进视频(quote_shot_keyframes 会回 delivery_warning),先 plan_shot_keyframes(dry_run:true) 或 tail_frame_plan 的 keyframe_advisory 看哪些镜送得到。'
+      + '\n★先 get_storyboards 读现值再改。回 400「本剧未开启」= 本剧没开放这项能力。',
     {
       storyboard_id: z.number().int().positive(),
       keyframes: z.array(z.object({
@@ -2020,10 +2034,12 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'quote_shot_keyframes',
-    '★**内测**·中间关键帧出图**报价**(免费·无副作用)。默认报本镜所有还没就绪的中间帧(planned / failed / framing_mismatch / no_progress),'
+    '中间关键帧出图**报价**(免费·无副作用)。默认报本镜所有还没就绪的中间帧(planned / failed / framing_mismatch / no_progress),'
       + 'keyframe_ids 可点名重出。回 estimated_points / typical_points、要出的 keyframes 与 quote_id。'
-      + '\n★前提:本镜视频引擎是 Seedance 2.5、首帧已就绪、已用 plan_shot_keyframes / set_shot_keyframes 写好中间帧。'
-      + '把 estimated_points 原样告诉客户,同意后再调 generate_shot_keyframes。回 400「本剧未开启」= 不在内测名单,别重试。',
+      + '\n★前提:本镜视频引擎是 seedance-2.5 或 kling-4.0、首帧已就绪(首帧要先定稿,重出首帧后中间帧作废)、已用 plan_shot_keyframes / set_shot_keyframes 写好中间帧。'
+      + '把 estimated_points 与 typical_points 都告诉客户,同意后再调 generate_shot_keyframes。'
+      + '\n★回 delivery_warning = 按现在的镜头结构(场景组 / 续拍 / 2.5 严格接缝)这些中间帧出了也不送进视频、点数照扣:把 message 原样告诉客户,客户要改结构(拆组 / 换引擎)再出,否则别出。'
+      + '回 400「本剧未开启」= 本剧没开放这项能力,别重试。',
     {
       storyboard_id: z.number().int().positive(),
       keyframe_ids: z.array(z.number().int().positive()).max(3).optional().describe('只重出这几张(默认:所有未就绪的)'),
@@ -2034,9 +2050,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'generate_shot_keyframes',
-    '★**内测**·按报价出本镜中间关键帧图(**真扣费**)。每张以本镜首帧为机位锚(有独立尾帧时一并作动作终点参考)、保持同一机位取景,人物按 prompt 推进到描述的那一刻;'
+    '按报价出本镜中间关键帧图(**真扣费**)。每张以本镜首帧为机位锚(有独立尾帧时一并作动作终点参考)、保持同一机位取景,人物按 prompt 推进到描述的那一刻;'
       + '不改本镜首尾帧、不把已有视频标陈旧。异步:立即返回 dispatched,用 get_shot_keyframes 轮询每张 status——'
-      + 'ready 才会在重出本镜视频时送进 Seedance 2.5;framing_mismatch = 取景与首帧对不上、no_progress = 与首帧几乎一样(动作没推进),这两种都不送,改 prompt 写清这一刻人物到了哪、做到哪一步后报价重出;failed = 出图失败。'
+      + 'ready 才会在重出本镜视频时送进视频(seedance-2.5 按秒对齐、kling-4.0 只按顺序;quote_regenerate_shot_video 的 shot_keyframes.mode=keyframes 即确认会送);framing_mismatch = 取景与首帧对不上、no_progress = 与首帧几乎一样(动作没推进),这两种都不送,改 prompt 写清这一刻人物到了哪、做到哪一步后报价重出;failed = 出图失败。'
       + '\n★报价后改过关键帧会 409,重新报价(免费)即可。' + REVIEW_GATE_HINT('review_storyboards', '分镜') + ASSET_GATE_HINT + CONFIRM_HINT,
     {
       storyboard_id: z.number().int().positive(),

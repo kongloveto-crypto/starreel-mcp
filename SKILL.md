@@ -1568,22 +1568,37 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   (explain away a conflict the AI mis-read instead of editing shots),
   `link_world_state_scene_variant`, `derive_pose_chain` (LLM, **billed** — fills
   only the shots whose poses are blank, so cuts connect).
-- **Intermediate keyframes inside one shot (closed beta)**: `plan_shot_keyframes`
+- **Intermediate keyframes inside one shot (enabled per project; currently on for all)**: `plan_shot_keyframes`
   (LLM, **billed**; `dry_run:true` to preview) adds 1–3 "at second t the frame
   shows …" targets between a shot's first and last frame — wind-up, contact,
   landing — so the video passes those beats instead of skipping them. Only
   shots on `seedance-2.5` (it follows keyframe timing within about ±1 s) or
-  `kling-4.0` (closed beta; keyframes are kept in order but their timing is not
+  `kling-4.0` (keyframes are kept in order but their timing is not
   honored, and the first frame stays hard-pinned), ≥5 s,
-  marked state-change or key moment. Fills empty shots only. Read with
+  marked state-change or key moment. Fills empty shots only. Shots that cannot
+  deliver keyframes to the video are skipped with a reason in
+  `skippedUndeliverable`: scene-group members, extension shots, and strict-seam
+  `seedance-2.5` shots whose first frame copies the previous last frame (switch
+  that shot to `kling-4.0` if it really needs keyframes). When to suggest it:
+  `tail_frame_plan` and `review_frames` return `keyframe_advisory.candidates` —
+  shots whose action has several beats, where first/last frames alone leave the
+  middle to the model (skipped process, standing still then teleporting). Ask
+  the customer; don't add keyframes to smooth single-arc, dialogue or subtle
+  shots, to beats that change camera setup (use `split_shot`), or to actions
+  scripted as teleports (fix the action text). Finalize the first frame before
+  rendering keyframes — regenerating it makes them stale. A `dry_run:true` plan is
+  not saved: after the customer confirms it, write each shot's previewed
+  keyframes with `set_shot_keyframes` (free, identical to what they saw) before
+  `quote_shot_keyframes`, which returns 400 when the shot has none. Read with
   `get_shot_keyframes` (returns the allowed window: t in [2, duration−1],
   ≥2 s apart, max 3) or the `keyframes` field of `get_storyboards`; overwrite
   with `set_shot_keyframes`. Prompts must describe a visible pose — no
   "about to / starting to" wording and no "no X" negations (both rejected).
-  A 400 "未开启" means the project is not in the beta. Render the keyframe
+  A 400 "未开启" means the project does not have this feature. Render the keyframe
   images with `quote_shot_keyframes` (free) → `generate_shot_keyframes`
   (**billed**, last-frame price tier, one candidate each; needs the shot's first
-  frame). Each image keeps the first frame's camera setup (the shot's own last
+  frame; a `delivery_warning` in the quote means the shot's structure keeps the
+  keyframes out of the video — tell the customer before spending). Each image keeps the first frame's camera setup (the shot's own last
   frame, when generated separately, is also sent as the action's end point) and
   moves the subject to the described instant; poll `get_shot_keyframes`: `ready`
   frames are used when the shot's video is regenerated, `framing_mismatch` means
