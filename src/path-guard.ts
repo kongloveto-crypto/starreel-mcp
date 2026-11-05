@@ -13,12 +13,16 @@
 import { realpathSync } from 'node:fs'
 import { sep } from 'node:path'
 
-export const MEDIA_EXT_BY_KIND: Record<'image' | 'video' | 'audio' | 'footage', ReadonlySet<string>> = {
+export type UploadKind = 'image' | 'video' | 'audio' | 'footage' | 'lut'
+
+export const MEDIA_EXT_BY_KIND: Record<UploadKind, ReadonlySet<string>> = {
   image: new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']),
   video: new Set(['.mp4', '.mov', '.webm', '.m4v']),
   // 0.1.63 实拍素材镜（整段视频当某镜的成片）：格式同 video，额度更大（后端 presign kind=footage）
   footage: new Set(['.mp4', '.mov', '.webm', '.m4v']),
   audio: new Set(['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg']),
+  // 剧级调色查找表(update_project_settings 的 color_lut,后端 presign kind=lut 只收 .cube)
+  lut: new Set(['.cube']),
 }
 
 const SYSTEM_PREFIXES = ['/etc/', '/private/etc/', '/proc/', '/sys/']
@@ -26,13 +30,13 @@ const SYSTEM_PREFIXES = ['/etc/', '/private/etc/', '/proc/', '/sys/']
 /** 校验通过返回解析后的真实路径；不通过抛 Error（消息面向第三方 agent，说清正路）。 */
 export function assertSafeLocalMediaPath(
   filePath: string,
-  kind: 'image' | 'video' | 'audio' | 'footage',
+  kind: UploadKind,
   resolve: (p: string) => string = realpathSync,
 ): string {
   const ext = (filePath.match(/\.[a-z0-9]+$/i)?.[0] || '').toLowerCase()
   if (!MEDIA_EXT_BY_KIND[kind].has(ext)) {
     throw new Error(
-      `file_path 只接受${kind === 'image' ? '图片' : (kind === 'video' || kind === 'footage') ? '视频' : '音频'}媒体文件`
+      `file_path 只接受${kind === 'image' ? '图片媒体' : (kind === 'video' || kind === 'footage') ? '视频媒体' : kind === 'lut' ? '调色查找表' : '音频媒体'}文件`
       + `(${[...MEDIA_EXT_BY_KIND[kind]].join('/')});收到 "${ext || '无扩展名'}"。`
       + '不要用本工具上传配置/密钥/文档类文件。',
     )

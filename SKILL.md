@@ -137,9 +137,14 @@ insists on that image (the check is automatic and can be wrong).
 Right after `create_drama`, before any paid step:
 
 1. Ask the basic video parameters: project type, aspect ratio, episodes ×
-   minutes per episode, subject class (`realistic_human` / `stylized` /
-   `product`), original clip audio or TTS.
-2. Call `get_production_menu` (free). It returns three packages built only
+   minutes per episode, roughly how many shots per episode, subject class
+   (`realistic_human` / `stylized` / `product`), original clip audio or TTS.
+2. Call `get_production_menu` (free). Pass `shots_per_episode` (or
+   `avg_shot_sec`) whenever you know or can estimate it from the script:
+   video is billed per shot and a shot shorter than the engine's minimum is
+   billed at that minimum (Seedance / MiniMax H3 4 s, Kling 4.0 3 s,
+   WAN 3.0 2 s), so a film of 2-second shots costs about twice what minutes
+   alone suggest. Pass the same value again to `confirm_production_plan`. It returns three packages built only
    from models that are **available right now for that subject class** — a
    model can be temporarily unavailable for one class (e.g. realistic humans)
    while fine for another. Never recommend models from memory. Relay each
@@ -1674,7 +1679,10 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   `design_voice` → `get_voice_design` → `save_designed_voice` (no sample needed),
   `speak_with_voice`, `set_character_voice`, `list_voices`, `delete_voice`,
   `generate_bgm` (optional `prompt` steers the music; read `get_bgm_prompt_guide` first; optional `director` hard-locks mood / instruments / bpm / tonality for the whole episode or per act (saved per episode like `prompt`: omit it to reuse the last one, pass `null` to clear) — call the free read-only `get_bgm_plan` first to see the acts; to let the client pick between full-length versions, `quote_bgm_candidates` → `generate_bgm` with `candidates` 2–3 + `quote_id` → `select_bgm_candidate`, each candidate billed per song),
-  `get_bgm_prompt_guide`, `replace_shot_dialogue`, `revoice_narration`
+  `get_bgm_prompt_guide`, `replace_shot_dialogue`, `revoice_narration`,
+  `set_own_bgm` (the client's **own or licensed** music as the episode/drama score — confirm the rights with the client
+  first and pass `rights_confirmed: true`; `file_path` uploads automatically; default aligns to second 0 of the cut;
+  never mix locally and `register_external_delivery` instead), `remove_own_bgm`
 - **Mix** (free; settings only — `compose_episode` again to hear them, `rerender_episode`
   reuses the old timeline): whole drama via `update_project_settings`
   (`bgm_volume_preset` / `bgm_volume_db` / `lufs_target`); one episode via
@@ -1704,6 +1712,12 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   — narration-card shots ignore footage and the upload is rejected (`narration_card_no_footage`).
 - **Finish**: `compose_episode`, `get_final_cut`, `get_export`,
   `generate_episode_poster`, `generate_cover`
+- **Final-cut length and resolution**: every non-hard-cut transition overlaps two shots, so the
+  final cut is shorter than the storyboard total (`declared_total_s`). `get_final_cut` /
+  `review_final_cut` return `duration_check` (measured `actual_duration_s`, `delta_s`, `causes`,
+  a `warning` above 5%) and `resolution` (`upscaled=true` = the final cut was scaled up from
+  lower-resolution shots). Tell the customer before they time BGM / voice-over to the storyboard;
+  use `default_transition=cut` if the lengths must match. `duration_sec` is measured, not rounded.
 - **What did this drama cost?** `get_drama_bill` — per kind `charged` / `refunded`
   / `net`. **`net` is the spend** (same number as the web "spent on this drama"
   and `get_budget_status`); `charged` includes failed calls that were refunded

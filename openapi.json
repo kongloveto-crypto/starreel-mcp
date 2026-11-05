@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.298",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.298 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.308",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.308 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -1455,7 +1455,7 @@
       "put": {
         "operationId": "update_project_settings",
         "summary": "建剧后修改项目设定",
-        "description": "建剧后修改项目设定。除画幅/分辨率/世界观Brief/族裔/题材/导演风格外,现覆盖★整剧视觉一致性锚(摄影DNA cinematography_prompt/美术圣经 art_bible/视觉锁定 visual_lock/视频风格正负向词/视觉母题 motifs)、音频(bgm_source 自有vs原生/bgm_volume_preset 音量/use_clip_audio 用视频原声)、字幕(show_subtitles/双语 subtitle_secondary_lang/位置/边距/动效)、转场——即项目设定页全部通用设定。免费。⚠️ 世界观 Brief/族裔/画幅/一致性锚等改后,已生成的内容不会自动更新,需重生对应内容。★aspect_ratio 除固定档外可设自由宽高比(数值如 2.35,只支持 Seedance 2.5 + Seedream + 非 4k、按剧灰度,未开通回 400),详见该参数说明。★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):开着时 extract_assets 提取完会自动给有描述、还没有图的道具逐件出道具图(按张计费,不单独报价),图落库后再自动做一次道具外形分析(小额后付);拆分镜/导入分镜落库后也会自动补全分镜空字段、服装时间线与道具标注(文本步后付)。false=这些自动动作都不跑,道具照常落库但没有图,要图用 generate_prop_sheet 逐件出(或 upload_prop_sheet 传自有图),缺的辅助资产要手动补;已生成的内容不受影响。客户想先看报价再出图、或不想要平台自动出的道具图时关掉。",
+        "description": "建剧后修改项目设定。除画幅/分辨率/世界观Brief/族裔/题材/导演风格外,现覆盖★整剧视觉一致性锚(摄影DNA cinematography_prompt/美术圣经 art_bible/视觉锁定 visual_lock/视频风格正负向词/视觉母题 motifs)、音频(bgm_source 自有vs原生/bgm_volume_preset 音量/use_clip_audio 用视频原声)、字幕(show_subtitles/双语 subtitle_secondary_lang/位置/边距/动效)、转场——即项目设定页全部通用设定。免费。⚠️ 世界观 Brief/族裔/画幅/一致性锚等改后,已生成的内容不会自动更新,需重生对应内容。★aspect_ratio 除固定档外可设自由宽高比(数值如 2.35,只支持 Seedance 2.5 + Seedream + 非 4k、按剧灰度,未开通回 400),详见该参数说明。★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):开着时 extract_assets 提取完会自动给有描述、还没有图的道具逐件出道具图(按张计费,不单独报价),图落库后再自动做一次道具外形分析(小额后付);拆分镜/导入分镜落库后也会自动补全分镜空字段、服装时间线与道具标注(文本步后付)。false=这些自动动作都不跑,道具照常落库但没有图,要图用 generate_prop_sheet 逐件出(或 upload_prop_sheet 传自有图),缺的辅助资产要手动补;已生成的内容不受影响。客户想先看报价再出图、或不想要平台自动出的道具图时关掉。★color_lut 是整片调色(终拼时对全片施加,字幕不受影响):整片调色(终拼时施加,在烧字幕之前,字幕保持原色;不重出视频、不扣费,下次 compose_episode / rerender_episode 生效;改了调色平台会自动作废已烤进旧调色的单镜合成片,终拼按新调色重来)。取值二选一:① 风格预设名 teal_orange / bleach_bypass / kodachrome / cool_night / warm_natural / high_key_pastel / mono_doc / fashion_film;② 客户自带 3D LUT:先 upload_image(file_path=本地 .cube, kind=lut) 上传,把返回的地址填这里——只收本人上传到平台的 .cube,外部链接不收;设置时平台会下载校验(须 LUT_3D_SIZE 2~65 的 3D 表,不收 1D 表),坏表当场 400。强度请烘焙进 .cube(平台按满强度施加)。传 null 清除。当前值见 get_drama 的 color_lut。",
         "tags": [
           "dramas"
         ],
@@ -1596,6 +1596,12 @@
                   },
                   "mv_audio_url": {
                     "type": "string"
+                  },
+                  "color_lut": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "output_language": {
                     "anyOf": [
@@ -2945,7 +2951,7 @@
       "put": {
         "operationId": "set_drama_logo",
         "summary": "设置本剧成片的图片台标(角标 logo),终拼时叠在全片字幕之上、整片可见",
-        "description": "设置本剧成片的图片台标(角标 logo),终拼时叠在全片字幕之上、整片可见。免费、不重出视频。先 upload_image 上传台标(建议透明底 PNG)拿到 URL 再传 src。尺寸/边距按 720p 高度基准、渲染时按成片高度等比缩放(例:1080×1920 竖屏要宽约 260px → width≈98)。改完 compose_episode / rerender_episode 生效。传 logo:null 清除台标。",
+        "description": "设置本剧成片的图片台标(角标 logo),终拼时叠在全片字幕之上、整片可见。免费、不重出视频。先 upload_image 上传台标(建议透明底 PNG)拿到 URL 再传 src——★只收本人经 upload_image 上传的平台地址,外部链接 400。尺寸/边距按 720p 高度基准、渲染时按成片高度等比缩放(例:1080×1920 竖屏要宽约 260px → width≈98)。默认常驻全片;给 end_s(可带 start_s / fade_s)则只在该时段出现并淡入淡出。改完 compose_episode / rerender_episode 生效。传 logo:null 清除台标。文字角标(书法片名/署名)用 set_drama_watermark。",
         "tags": [
           "dramas"
         ],
@@ -2999,6 +3005,21 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 200
+                  },
+                  "start_s": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 7200
+                  },
+                  "end_s": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 7200
+                  },
+                  "fade_s": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10
                   },
                   "logo": {
                     "type": "null"
@@ -3978,6 +3999,16 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 30
+                  },
+                  "shots_per_episode": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  },
+                  "avg_shot_sec": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 60
                   }
                 },
                 "required": [
@@ -4563,6 +4594,304 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/dramas/{drama_id}/watermark": {
+      "get": {
+        "operationId": "get_drama_watermark",
+        "summary": "读本剧成片的片角文字角标(title 片名 / handle 署名)与图片台标的当前设置",
+        "description": "读本剧成片的片角文字角标(title 片名 / handle 署名)与图片台标的当前设置。免费。各项 null = 没设。",
+        "tags": [
+          "dramas"
+        ],
+        "parameters": [
+          {
+            "name": "drama_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      },
+      "put": {
+        "operationId": "set_drama_watermark",
+        "summary": "设置本剧成片的**片角文字角标**:title(片名,默认毛笔楷 brush、竖排、右上角)与 handle(署名/账号,默认得意黑 gothic、横排、左下角)",
+        "description": "设置本剧成片的**片角文字角标**:title(片名,默认毛笔楷 brush、竖排、右上角)与 handle(署名/账号,默认得意黑 gothic、横排、左下角)。终拼时叠在画面与字幕之上(全剧每集成片都带),免费、不重出视频,下次 compose_episode / rerender_episode 生效。例:右下角横排书法片名、只在开头 5 秒出现并淡入淡出 → title={text:片名, font:'brush', vertical:false, gravity:'SouthEast', end_s:5, fade_s:0.5}。不给 end_s = 常驻全片。只传要改的那一项,另一项不动;传 null 清除该项。★区别:这是**叠在画面上的角标**(不占时长);set_episode_poster_card / 片头卡(cover_card_default)是**接在片头/片尾的独立画面**;set_shot_name_card 是某一镜的人物名牌;图片 logo 用 set_drama_logo。尺寸/边距按 720p 高度基准、渲染时按成片高度等比缩放。",
+        "tags": [
+          "dramas"
+        ],
+        "parameters": [
+          {
+            "name": "drama_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 60,
+                            "description": "角标文字(1~60 字)"
+                          },
+                          "font": {
+                            "type": "string",
+                            "enum": [
+                              "brush",
+                              "gothic"
+                            ],
+                            "description": "brush=毛笔楷(片名默认) / gothic=得意黑(署名默认)"
+                          },
+                          "vertical": {
+                            "type": "boolean",
+                            "description": "竖排(一字一行);片名默认 true,署名默认 false"
+                          },
+                          "font_size": {
+                            "type": "integer",
+                            "minimum": 8,
+                            "maximum": 200,
+                            "description": "字号 px(720p 基准);片名默认 46,署名默认 30"
+                          },
+                          "color": {
+                            "type": "string",
+                            "pattern": "^#[0-9A-Fa-f]{6}$",
+                            "description": "#RRGGBB,默认白"
+                          },
+                          "opacity": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "不透明度 0–1,默认 0.92"
+                          },
+                          "gravity": {
+                            "type": "string",
+                            "enum": [
+                              "NorthEast",
+                              "NorthWest",
+                              "SouthEast",
+                              "SouthWest"
+                            ],
+                            "description": "角落;片名默认 NorthEast 右上,署名默认 SouthWest 左下"
+                          },
+                          "margin_x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 400,
+                            "description": "距左右边 px(720p 基准)"
+                          },
+                          "margin_y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 400,
+                            "description": "距上下边 px(720p 基准)"
+                          },
+                          "line_spacing": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "行距/字距 px(720p 基准)"
+                          },
+                          "start_s": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 7200,
+                            "description": "出现时刻(秒,成片时间轴),默认 0;要给就必须同时给 end_s"
+                          },
+                          "end_s": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 7200,
+                            "description": "消失时刻(秒);不给 = 常驻全片"
+                          },
+                          "fade_s": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 10,
+                            "description": "淡入、淡出各多少秒,默认 0(超过半个时段按半个时段算)"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "handle": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 60,
+                            "description": "角标文字(1~60 字)"
+                          },
+                          "font": {
+                            "type": "string",
+                            "enum": [
+                              "brush",
+                              "gothic"
+                            ],
+                            "description": "brush=毛笔楷(片名默认) / gothic=得意黑(署名默认)"
+                          },
+                          "vertical": {
+                            "type": "boolean",
+                            "description": "竖排(一字一行);片名默认 true,署名默认 false"
+                          },
+                          "font_size": {
+                            "type": "integer",
+                            "minimum": 8,
+                            "maximum": 200,
+                            "description": "字号 px(720p 基准);片名默认 46,署名默认 30"
+                          },
+                          "color": {
+                            "type": "string",
+                            "pattern": "^#[0-9A-Fa-f]{6}$",
+                            "description": "#RRGGBB,默认白"
+                          },
+                          "opacity": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "不透明度 0–1,默认 0.92"
+                          },
+                          "gravity": {
+                            "type": "string",
+                            "enum": [
+                              "NorthEast",
+                              "NorthWest",
+                              "SouthEast",
+                              "SouthWest"
+                            ],
+                            "description": "角落;片名默认 NorthEast 右上,署名默认 SouthWest 左下"
+                          },
+                          "margin_x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 400,
+                            "description": "距左右边 px(720p 基准)"
+                          },
+                          "margin_y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 400,
+                            "description": "距上下边 px(720p 基准)"
+                          },
+                          "line_spacing": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "行距/字距 px(720p 基准)"
+                          },
+                          "start_s": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 7200,
+                            "description": "出现时刻(秒,成片时间轴),默认 0;要给就必须同时给 end_s"
+                          },
+                          "end_s": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 7200,
+                            "description": "消失时刻(秒);不给 = 常驻全片"
+                          },
+                          "fade_s": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 10,
+                            "description": "淡入、淡出各多少秒,默认 0(超过半个时段按半个时段算)"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "StarReel envelope",
@@ -6031,6 +6360,9 @@
                   },
                   "quote_id": {
                     "type": "string"
+                  },
+                  "replace_own_bgm": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -6069,7 +6401,7 @@
       "get": {
         "operationId": "list_bgm_cues",
         "summary": "列出本集的配乐段(AI 配乐按情绪分幕,每段覆盖一段镜号 sb_from~sb_to):id、覆盖范围、gain_db(null=跟随音量档)、fade_in_ms / fade_out_ms、track_offset_ms / start",
-        "description": "列出本集的配乐段(AI 配乐按情绪分幕,每段覆盖一段镜号 sb_from~sb_to):id、覆盖范围、gain_db(null=跟随音量档)、fade_in_ms / fade_out_ms、track_offset_ms / start_shift_ms(null=系统决定)。episode_id 为 null 的是**整剧共用段**,改它会影响所有集。免费。",
+        "description": "列出本集的配乐段(AI 配乐按情绪分幕,每段覆盖一段镜号 sb_from~sb_to):id、覆盖范围、gain_db(null=跟随音量档)、fade_in_ms / fade_out_ms、track_offset_ms / start_shift_ms(null=系统决定)。episode_id 为 null 的是**整剧共用段**,改它会影响所有集。source:ai=AI 配乐 / library=公共曲库 / customer=客户自有(set_own_bgm)。免费。",
         "tags": [
           "episodes"
         ],
@@ -6355,7 +6687,7 @@
       "get": {
         "operationId": "get_bgm_status",
         "summary": "查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数",
-        "description": "查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数。免费。配乐 done 后需重新 compose_episode 才进成片。",
+        "description": "查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数。免费。customer_tracks 列出客户自有配乐(set_own_bgm 挂的);它非空说明本集已有配乐,别再 generate_bgm。配乐 done 后需重新 compose_episode 才进成片。",
         "tags": [
           "episodes"
         ],
@@ -6619,7 +6951,7 @@
       "post": {
         "operationId": "compose_episode",
         "summary": "把某一集所有镜头视频拼成一条成片(终拼)",
-        "description": "把某一集所有镜头视频拼成一条成片(终拼)。**免费**(纯拼接,无需报价确认),后台异步。发起前有终拼预检:缺视频的镜或仍在生成中的视频任务会 400 硬阻断并列出问题镜(blockers),补齐后重试;确要拼部分成片传 force=true(缺视频镜被跳过,成片缺镜,留痕)。响应里的 advisories(时长偏差/孤儿任务/缺TTS/post_production_pending 后期特效未完成)只提醒不阻断,建议逐条处理后再拼。发起后用 get_final_cut 轮询。\n★【视频与配音审查硬闸·免费】本步前必须先调 review_videos:把返回的 findings 逐条原样告诉客户(每条带 code=问题类型、shots=命中镜号、action=该调哪个工具修),再把 review_token 传进本工具。未审查会被 400 拒。审查后又改了内容 → token 自动失效,复审一次即可(仍免费)。单镜工具(generate_shot_frame / regenerate_shot_video)只核本镜与相邻镜:改了别的镜不用复审;本镜、相邻镜或共享资产变了才 400——这时带 base_review_token=<旧 token> 调审查工具做增量复审,只重审变更镜,质检也只看变更镜。有 error 时默认拦截;客户知情并坚持照现状继续,才带 acknowledge_review:true——带病推进大概率产出废片且照常扣费(acknowledge_review 只代表客户本人同意,任何执行模式都须客户明确同意,托管也不例外);托管环节只有白名单内的启发式 error 能带 auto_acknowledge:true 放行(平台判,不在白名单回 400 AUTOPILOT_MUST_ASK:must_ask_customer=true 才暂停问客户,false = 按 action 自修复审)。★灰度剧还要你(agent)亲自质检:按 review_videos 返回的 agent_qc 逐件看素材、逐条答清单,调 submit_qc_report 提交后这张 token 才能用(没交 → 400 agent_qc_required;报告有问题 → 与 error 同样默认拦)。\n★★【成片前自检·review_videos 通过后、compose_episode 之前】别靠反复导出整片、手工试转场来找问题——逐镜与接缝的问题有专门工具,拼之前按序过一遍:①这一集换过定妆图 / 设定图 / 场景图 / 镜头帧 → 先 get_stale_portrait_frames(episode_id,免费)看哪些镜的在用帧还基于旧资产,拿不准该用哪一版的镜再 get_asset_versions(storyboard_id,免费)逐镜看版本与依赖(unknown 是证据不足、不是已过期;重出要付费,清单讲给客户由客户定);②scan_intra_shot_cuts(episode_id,免费)查厂商在单镜内自行硬切的镜;③逐镜 recommend_trim_window(storyboard_id,免费)看冻结尾段与有效动作区间(组内镜返回 applicable=false,跳过),有推荐就 trim_shot 应用(免费);④audit_seams(episode_id)查相邻镜接缝的剪辑连续性:默认 dry_run 只列待审范围(免费),真执行按实际文本 token 计费,讲给客户、客户明确接受后才带 dry_run:false + confirm_usage_billing:true,结果看 get_storyboards 的 seam_review;⑤再 compose_episode。拼完成片发现跳切 / 拖尾 / 接不上,回到这几个工具按镜定位后只修那几镜,别整片反复导出试错。这些都是提示性检查,不过闸;裁剪与接缝审核不让 review_videos 的 token 失效。\n★【完成后质检·免费】成片出来后跑 review_final_cut(缺镜/字幕放不下/身份锚/跳轴/错别字,proofread=false 则不扣费),结论讲给客户;客户确认后才 confirm_delivery_acceptance(交付验收任何执行模式都须客户明确同意,托管也不例外)。force 只越过终拼预检,不越过审查闸。",
+        "description": "把某一集所有镜头视频拼成一条成片(终拼)。**免费**(纯拼接,无需报价确认),后台异步。发起前有终拼预检:缺视频的镜或仍在生成中的视频任务会 400 硬阻断并列出问题镜(blockers),补齐后重试;确要拼部分成片传 force=true(缺视频镜被跳过,成片缺镜,留痕)。响应里的 advisories(时长偏差/孤儿任务/缺TTS/post_production_pending 后期特效未完成)只提醒不阻断,建议逐条处理后再拼。发起后用 get_final_cut 轮询。\n★【视频与配音审查硬闸·免费】本步前必须先调 review_videos:把返回的 findings 逐条原样告诉客户(每条带 code=问题类型、shots=命中镜号、action=该调哪个工具修),再把 review_token 传进本工具。未审查会被 400 拒。审查后又改了内容 → token 自动失效,复审一次即可(仍免费)。单镜工具(generate_shot_frame / regenerate_shot_video)只核本镜与相邻镜:改了别的镜不用复审;本镜、相邻镜或共享资产变了才 400——这时带 base_review_token=<旧 token> 调审查工具做增量复审,只重审变更镜,质检也只看变更镜。有 error 时默认拦截;客户知情并坚持照现状继续,才带 acknowledge_review:true——带病推进大概率产出废片且照常扣费(acknowledge_review 只代表客户本人同意,任何执行模式都须客户明确同意,托管也不例外);托管环节只有白名单内的启发式 error 能带 auto_acknowledge:true 放行(平台判,不在白名单回 400 AUTOPILOT_MUST_ASK:must_ask_customer=true 才暂停问客户,false = 按 action 自修复审)。★灰度剧还要你(agent)亲自质检:按 review_videos 返回的 agent_qc 逐件看素材、逐条答清单,调 submit_qc_report 提交后这张 token 才能用(没交 → 400 agent_qc_required;报告有问题 → 与 error 同样默认拦)。\n★★【成片前自检·review_videos 通过后、compose_episode 之前】别靠反复导出整片、手工试转场来找问题——逐镜与接缝的问题有专门工具,拼之前按序过一遍:①这一集换过定妆图 / 设定图 / 场景图 / 镜头帧 → 先 get_stale_portrait_frames(episode_id,免费)看哪些镜的在用帧还基于旧资产,拿不准该用哪一版的镜再 get_asset_versions(storyboard_id,免费)逐镜看版本与依赖(unknown 是证据不足、不是已过期;重出要付费,清单讲给客户由客户定);②scan_intra_shot_cuts(episode_id,免费)查厂商在单镜内自行硬切的镜;③逐镜 recommend_trim_window(storyboard_id,免费)看冻结尾段与有效动作区间(组内镜返回 applicable=false,跳过),有推荐就 trim_shot 应用(免费);④audit_seams(episode_id)查相邻镜接缝的剪辑连续性:默认 dry_run 只列待审范围(免费),真执行按实际文本 token 计费,讲给客户、客户明确接受后才带 dry_run:false + confirm_usage_billing:true,结果看 get_storyboards 的 seam_review;⑤再 compose_episode。拼完成片发现跳切 / 拖尾 / 接不上,回到这几个工具按镜定位后只修那几镜,别整片反复导出试错。这些都是提示性检查,不过闸;裁剪与接缝审核不让 review_videos 的 token 失效。\n★成片时长 ≠ 分镜合计:每道非硬切转场(叠化等)会把相邻两镜重叠掉转场时长(7 道 300ms 叠化 ≈ 少 2.1s)。回执的 declared_total_s 是分镜合计,不是成片时长;成片实测时长、差值与来源看 get_final_cut / review_final_cut 的 duration_check。要成片时长等于分镜合计就用硬切(default_transition=cut)。\n★分辨率:成片画布按剧的画幅定(如 16:9 = 1920x1080),镜头源分辨率由所选视频模型 / resolution 决定(如 720p = 1280x720);源低于画布时成片是**放大**出来的、不增加实际清晰度——get_final_cut 的 resolution 会写明。\n★【完成后质检·免费】成片出来后跑 review_final_cut(缺镜/字幕放不下/身份锚/跳轴/错别字,proofread=false 则不扣费),结论讲给客户;客户确认后才 confirm_delivery_acceptance(交付验收任何执行模式都须客户明确同意,托管也不例外)。force 只越过终拼预检,不越过审查闸。",
         "tags": [
           "episodes"
         ],
@@ -7777,7 +8109,7 @@
       "get": {
         "operationId": "get_final_cut",
         "summary": "查某一集成片状态与下载链接",
-        "description": "查某一集成片状态与下载链接。status=completed 时返回 download_url(我方 COS 直链,可直接下载)。免费。★bgm_stale=true 表示配乐在成片之后生成/改动、尚未进成片:重新 compose_episode(免费)即可,别用 re-render。★若设过当前交付版(register_external_delivery 登记的外部版,或 set_current_delivery 指定的平台版),另返回 delivery——那才是客户实际收到的一版;download_url 仍是平台最新一次拼的成片。要看每一版成片用了什么、哈希是多少,用 list_deliveries。★返回 hit_stop_shots = 剪辑层给哪些镜加了「命中定格」(画面在打击点停一下)、落在本镜/成片第几毫秒:客户说某镜中途「顿一下」「卡顿」先看这里,落点不对用 set_shot_post(hit_stop_at_ms) 校正或 hit_stop=false 关掉,再 compose_episode(都免费),别去重出视频。",
+        "description": "查某一集成片状态与下载链接。status=completed 时返回 download_url(我方 COS 直链,可直接下载)。免费。★duration_sec = 成片文件实测时长(秒,保留两位小数,不取整)。duration_check = 分镜合计 declared_total_s / 实测 actual_duration_s / 差值 delta_s 与来源 causes(transition_overlap=转场重叠,other=片长与声明不符);差值超过 5% 带 warning 与 suggestion,原样讲给客户——按分镜时长做配乐 / 口播的客户最容易踩。★resolution = 成片分辨率 / 镜头源分辨率,upscaled=true 表示成片是放大出来的,要讲给客户。★bgm_stale=true 表示配乐在成片之后生成/改动、尚未进成片:重新 compose_episode(免费)即可,别用 re-render。★若设过当前交付版(register_external_delivery 登记的外部版,或 set_current_delivery 指定的平台版),另返回 delivery——那才是客户实际收到的一版;download_url 仍是平台最新一次拼的成片。要看每一版成片用了什么、哈希是多少,用 list_deliveries。★返回 hit_stop_shots = 剪辑层给哪些镜加了「命中定格」(画面在打击点停一下)、落在本镜/成片第几毫秒:客户说某镜中途「顿一下」「卡顿」先看这里,落点不对用 set_shot_post(hit_stop_at_ms) 校正或 hit_stop=false 关掉,再 compose_episode(都免费),别去重出视频。",
         "tags": [
           "episodes"
         ],
@@ -8302,6 +8634,186 @@
             "schema": {
               "type": "integer",
               "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/episodes/{episode_id}/own-bgm": {
+      "put": {
+        "operationId": "set_own_bgm",
+        "summary": "把**客户自己的音乐**挂成本集(或整剧)配乐(免费;只做一次音频解析)",
+        "description": "把**客户自己的音乐**挂成本集(或整剧)配乐(免费;只做一次音频解析)。适用:MV、广告、品牌片等客户自带配乐。★★只能用客户自有或已获授权的音频:调用前必须向客户确认这段音乐的版权/授权(商用授权、平台播放授权),确认后才带 rights_confirmed:true;拿不准就先问,别替客户假设。网上下载的流行歌、影视原声不能用。传本地文件(file_path,自动上传)或已上传的音频地址(audio_url,须是本人经 upload-url kind=audio 直传的)或已登记的曲目(track_id,来自 list_bgm_cues),三选一。默认 align_to_start=true:从成片第 0 秒起、从音频第 0 秒开始放,覆盖全片(曲内起点 0、不平移、淡入 0);要跳过前奏传 track_offset_ms;要只挂某几镜或晚点进,传 align_to_start:false + sb_from/sb_to/start_shift_ms。gain_db 不传=跟随本集/整剧配乐音量档(set_episode_audio);音频比成片短时放完即停、结尾那段没有配乐(不从头循环,响应 warnings 会说)。★MV 项目不用本工具(409):MV 的歌是主音轨,建剧时用 mv_audio_url 传入。默认替换本集原有配乐段(含 AI 配乐);本剧有整剧共用段时会 409,按提示选 replace_shared / scope=\"drama\"。响应 will_play=false 时看 blockers(如本剧 bgm_enabled=false),按提示用 update_project_settings / set_episode_audio 打开。挂上后 list_bgm_cues(source=customer)与 get_bgm_status(customer_tracks)都能看到;compose_episode 重新合成后进成片(rerender_episode 不会带上)。★别再关掉平台配乐、本地 ffmpeg 混音后 register_external_delivery——那样交付来源变成「未知」,追溯链断掉。之后若改用 AI 配乐,generate_bgm 带 replace_own_bgm:true。",
+        "tags": [
+          "episodes"
+        ],
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rights_confirmed": {
+                    "type": "boolean",
+                    "const": true,
+                    "description": "客户已确认这段音频是自有或已获授权的(必须为 true,否则 400)"
+                  },
+                  "track_id": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "episode",
+                      "drama"
+                    ]
+                  },
+                  "align_to_start": {
+                    "type": "boolean"
+                  },
+                  "sb_from": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sb_to": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "track_offset_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 600000
+                  },
+                  "start_shift_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 60000
+                  },
+                  "gain_db": {
+                    "type": "number",
+                    "minimum": -60,
+                    "maximum": 0
+                  },
+                  "fade_in_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15000
+                  },
+                  "fade_out_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15000
+                  },
+                  "replace_existing": {
+                    "type": "boolean"
+                  },
+                  "replace_shared": {
+                    "type": "boolean"
+                  },
+                  "audio_url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rights_confirmed"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "remove_own_bgm",
+        "summary": "摘掉本集挂的客户自有配乐段(免费;只动 set_own_bgm 挂的客户音乐,AI 配乐段不动;曲目文件仍在,可再用 track_id 挂回)",
+        "description": "摘掉本集挂的客户自有配乐段(免费;只动 set_own_bgm 挂的客户音乐,AI 配乐段不动;曲目文件仍在,可再用 track_id 挂回)。scope=\"drama\" 连整剧共用的客户配乐段一起摘(影响每一集)。改完 compose_episode 重新合成才生效。",
+        "tags": [
+          "episodes"
+        ],
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -9108,7 +9620,7 @@
       "get": {
         "operationId": "review_final_cut",
         "summary": "**成片体检**:导出前把整集过一遍——没出图的镜、字幕一屏放不下、人物没有身份锚、镜头连续性(跳轴)、以及一次错别字通读",
-        "description": "**成片体检**:导出前把整集过一遍——没出图的镜、字幕一屏放不下、人物没有身份锚、镜头连续性(跳轴)、以及一次错别字通读。\n★**建议式,不阻断**:can_export=false 只代表有 block 级问题值得先看,平台不会拦着你 compose_episode / get_export。把 findings 逐条讲给客户(code=问题类型、shots=命中的镜号、action=该调哪个工具去修),**由客户决定修还是照发**。\n★费用:本身免费,但默认会跑一次 LLM 错别字通读——那一步**要花钱**。不需要通读就传 proofread=false(更快也不扣费)。\n★字幕与错别字那几项的**原文**在官网体检面板里看,这里只给结论与镜号。",
+        "description": "**成片体检**:导出前把整集过一遍——没出图的镜、字幕一屏放不下、人物没有身份锚、镜头连续性(跳轴)、以及一次错别字通读。\n★同时给 duration_check(成片实测时长 vs 分镜合计、差值来源)与 resolution(成片 vs 镜头源分辨率、是否放大);差值超过 5% 会多一条 final_cut_shorter_than_storyboard / final_cut_longer_than_storyboard 的 warn。\n★**建议式,不阻断**:can_export=false 只代表有 block 级问题值得先看,平台不会拦着你 compose_episode / get_export。把 findings 逐条讲给客户(code=问题类型、shots=命中的镜号、action=该调哪个工具去修),**由客户决定修还是照发**。\n★费用:本身免费,但默认会跑一次 LLM 错别字通读——那一步**要花钱**。不需要通读就传 proofread=false(更快也不扣费)。\n★字幕与错别字那几项的**原文**在官网体检面板里看,这里只给结论与镜号。",
         "tags": [
           "episodes"
         ],
@@ -11908,7 +12420,7 @@
       "post": {
         "operationId": "quote_videos",
         "summary": "报价:给某一集批量出视频要多少点(与实际扣费同函数,较准)",
-        "description": "报价:给某一集批量出视频要多少点(与实际扣费同函数,较准)。返回 estimated_points、quote_id。零扣费。⚠️ 视频是大额花费,务必把点数清楚告诉用户并等其确认。\n★**frame_delivery = 本次逐镜真正送到厂商的帧**:列出有独立尾帧的计价镜,以及首帧不送达的计价镜(带 reason,如 reference_video_exclusive=挂了定妆视频锚/运动参考);first_frame.verified=false = 预览没跑完、送不送未核验,别当已送达讲,可逐镜 quote_regenerate_shot_video 核对;没列出的计价镜 = 已核验首帧照常送达、无独立尾帧。advisories 里出现 av_anchor_strips_frames = 这些镜被角色定妆视频锚剥掉首尾帧,把镜号讲给客户,要保住首尾帧就 get_av_anchors 看来源、客户同意后 clear_character_av_anchor 摘锚再重新报价。\n★**只计这次真会派发的镜**:已出视频的镜整集续跑时跳过,不重出不计价——shots_total = 这次计价的镜数(不是集内总镜数),shots_already_done = 已出视频、这次跳过的镜数。例外:场景组只要有一镜没出视频就**整组重出**,组内已出的镜同样计价。全部已出视频 ⇒ 400(没有可派发的镜,要重出某镜用 regenerate_shot_video)。报价之后若有镜的视频被清空(变成待出视频),generate_videos 会 409 要求重新报价,不按报价外的镜扣费。\n★**按镜指定视频引擎**:传 shot_engines={分镜id: 引擎} 即只为这些镜、这一次整集生成换引擎(不改剧级 video_engine,其余镜照旧)。报价按它逐镜计价,quote_id 把引擎钉死,generate_videos 派发的就是它——要改引擎必须重新报价。回执 shot_engines = 实际生效的映射;shot_engines_ungrouped = 因含指定镜而**拆成逐镜出**的场景组(场景组的时长与多关键帧是按剧引擎规划的,换引擎整组出会丢镜/丢关键帧;拆组后组内其余镜仍按剧引擎逐镜出,失去组内一次成片的连贯性,所以别为一镜去拆一个好好的组——先看 get_scene_group_plan)。所选引擎必须支持本剧分辨率(seedance-2.5 只有 480p/720p;hailuo-3 只有 720p/1080p;wan3.0/wan3.0-prime 480p~1080p),且镜头时长不超过该引擎单镜上限(seedance-2.5/wan3.0 30s,hailuo-3 15s),否则 400(超长会被厂商截断,要么换引擎要么 split_shot)。指定引擎的镜必须这次会出视频:已出视频的镜整集生成不会重出,给它指定引擎 ⇒ 400;拆成逐镜的场景组只计没出视频的组员。只想重出个别已出过视频的镜,用 quote_regenerate_shot_video 的 model 更省。★响应可能带**未接缝提示**(不影响 review_token / 报价 / 状态码):review_frames 与 generate_videos 是 unchained_seam_advisory,quote_videos 是 advisories 里 code=unchained_seams。seams 列的是 chain_frames 会接、却还没接上的相邻缝(from_shot→to_shot),status=no_stamp(从没接过)/ pending(发起过衔接、还没落地或审计未出结论)/ stale_anchor(上次承接的锚已失效:上一镜尾帧在衔接之后又被重生过,需要重接)/ join_failed(上次发起的衔接重生被拒 / 失败 / 落选,没落地)/ audit_failed(衔接落地但审计判不连续,看 get_storyboards 的 seam_failed_dims)/ first_frame_regenerated(接缝审过之后下镜首帧又被重出、没走承接路径,原衔接已不算数)/ not_linked(规划器判没接上、原因证据不足);都按计划重接即可;video_locked 是下镜已出视频的同类缝,chain_frames 不再改它们,只能逐镜 chain_shot_from_prev / chain_shot_from 换首帧后 regenerate_shot_video(都先报价)。出视频前看到 seams 就先 chain_frames(dry_run:true) 把计划与报价告诉客户,客户同意再执行,执行后重调 review_frames。",
+        "description": "报价:给某一集批量出视频要多少点(与实际扣费同函数,较准)。返回 estimated_points、quote_id。零扣费。⚠️ 视频是大额花费,务必把点数清楚告诉用户并等其确认。\n★分辨率:成片画布按剧的画幅定(如 16:9 = 1920x1080),镜头源分辨率由所选视频模型 / resolution 决定(如 720p = 1280x720);源低于画布时成片是**放大**出来的、不增加实际清晰度,报价时一并讲给客户。\n★**shot_billing = 逐镜计费明细**(duration_sec 镜长 / billed_sec 计费秒数 / points):视频按厂商实际出片秒数计费,短于引擎最低计费秒数的镜按最低秒数计(Seedance 与 MiniMax H3 4 秒、可灵 4.0 3 秒、WAN 3.0 2 秒),成片仍按镜长剪辑。advisories 出现 short_shot_min_billing 就把它的说明原样讲给客户(多少镜、多计几秒、为什么比按镜长算的贵),客户要省就合并相邻短镜成场景组或换引擎后重新报价。\n★**frame_delivery = 本次逐镜真正送到厂商的帧**:列出有独立尾帧的计价镜,以及首帧不送达的计价镜(带 reason,如 reference_video_exclusive=挂了定妆视频锚/运动参考);first_frame.verified=false = 预览没跑完、送不送未核验,别当已送达讲,可逐镜 quote_regenerate_shot_video 核对;没列出的计价镜 = 已核验首帧照常送达、无独立尾帧。advisories 里出现 av_anchor_strips_frames = 这些镜被角色定妆视频锚剥掉首尾帧,把镜号讲给客户,要保住首尾帧就 get_av_anchors 看来源、客户同意后 clear_character_av_anchor 摘锚再重新报价。\n★**只计这次真会派发的镜**:已出视频的镜整集续跑时跳过,不重出不计价——shots_total = 这次计价的镜数(不是集内总镜数),shots_already_done = 已出视频、这次跳过的镜数。例外:场景组只要有一镜没出视频就**整组重出**,组内已出的镜同样计价。全部已出视频 ⇒ 400(没有可派发的镜,要重出某镜用 regenerate_shot_video)。报价之后若有镜的视频被清空(变成待出视频),generate_videos 会 409 要求重新报价,不按报价外的镜扣费。\n★**按镜指定视频引擎**:传 shot_engines={分镜id: 引擎} 即只为这些镜、这一次整集生成换引擎(不改剧级 video_engine,其余镜照旧)。报价按它逐镜计价,quote_id 把引擎钉死,generate_videos 派发的就是它——要改引擎必须重新报价。回执 shot_engines = 实际生效的映射;shot_engines_ungrouped = 因含指定镜而**拆成逐镜出**的场景组(场景组的时长与多关键帧是按剧引擎规划的,换引擎整组出会丢镜/丢关键帧;拆组后组内其余镜仍按剧引擎逐镜出,失去组内一次成片的连贯性,所以别为一镜去拆一个好好的组——先看 get_scene_group_plan)。所选引擎必须支持本剧分辨率(seedance-2.5 只有 480p/720p;hailuo-3 只有 720p/1080p;wan3.0/wan3.0-prime 480p~1080p),且镜头时长不超过该引擎单镜上限(seedance-2.5/wan3.0 30s,hailuo-3 15s),否则 400(超长会被厂商截断,要么换引擎要么 split_shot)。指定引擎的镜必须这次会出视频:已出视频的镜整集生成不会重出,给它指定引擎 ⇒ 400;拆成逐镜的场景组只计没出视频的组员。只想重出个别已出过视频的镜,用 quote_regenerate_shot_video 的 model 更省。★响应可能带**未接缝提示**(不影响 review_token / 报价 / 状态码):review_frames 与 generate_videos 是 unchained_seam_advisory,quote_videos 是 advisories 里 code=unchained_seams。seams 列的是 chain_frames 会接、却还没接上的相邻缝(from_shot→to_shot),status=no_stamp(从没接过)/ pending(发起过衔接、还没落地或审计未出结论)/ stale_anchor(上次承接的锚已失效:上一镜尾帧在衔接之后又被重生过,需要重接)/ join_failed(上次发起的衔接重生被拒 / 失败 / 落选,没落地)/ audit_failed(衔接落地但审计判不连续,看 get_storyboards 的 seam_failed_dims)/ first_frame_regenerated(接缝审过之后下镜首帧又被重出、没走承接路径,原衔接已不算数)/ not_linked(规划器判没接上、原因证据不足);都按计划重接即可;video_locked 是下镜已出视频的同类缝,chain_frames 不再改它们,只能逐镜 chain_shot_from_prev / chain_shot_from 换首帧后 regenerate_shot_video(都先报价)。出视频前看到 seams 就先 chain_frames(dry_run:true) 把计划与报价告诉客户,客户同意再执行,执行后重调 review_frames。",
         "tags": [
           "episodes"
         ],
@@ -12999,7 +13511,7 @@
       "post": {
         "operationId": "get_production_menu",
         "summary": "★开场第二步(免费·只读·不需要剧号):按客户的基本视频参数,返回**当前可用**的三档模型套餐(省钱/标准/高品质)",
-        "description": "★开场第二步(免费·只读·不需要剧号):按客户的基本视频参数,返回**当前可用**的三档模型套餐(省钱/标准/高品质)。每档给:图片模型+视频引擎+分辨率、效果说明(effect)、实时预估(estimate:每集与全剧的 typical 通常花费与 upper 上界,breakdown 分项)、warnings(所选模型近期繁忙/失败偏多)、substitutions(本档首选模型暂不可用、退到后备组合的原因)。某档 available=false 表示该档模型当前都不可用(unavailable_reason 说明),别推荐它。estimate=null 表示价格服务暂时取不到实时单价——如实告诉客户「暂时估不出」,别自己编数字。estimate 已含文本步(剧本改写、拆镜、分镜补全,按每镜约 360 点估,breakdown 的 text 项)。not_included 列出不在预估里的花费(配音配乐、质检重出与审核拒绝后的重出),一并讲给客户;质检重出不进上界,由「自动追加」额度兜底。★建议预算:每档 recommended_budget = (该档 estimate.total.upper − breakdown 的 text 项) × 1.2 + text 项(文本不放大);菜单的 recommended_overrun_pct=30 是建议的追加档位。向客户**默认建议**「预算 = recommended_budget、追加 30%」(budget_advice 是现成的说法),说明这只是建议,预算与追加比例由客户决定(追加可选 0/10/20/30/50)。availability 是全部模型对该题材的实时可用性(由管理控制台开关决定、随时可能变,专业客户自选模型时用,unavailable 的不能选;unavailable 项带 customer_note 与 expected_until,原样转告客户,别自己编原因或日期)。★专业客户自选模型:带 custom(图片模型+视频引擎+分辨率)再调一次,返回体多一个 custom(可用性+实时预估);把 custom.estimate 讲给客户,确认时把 custom.estimate.total.upper 作为 expected_total_upper 原样带回。★「历史上多少剧会用到追加」平台目前不提供:**不许**自己估一个比例或数字给客户;客户问追加会不会用到,只说明追加额度用于兜底质检重出、审核拒绝后的重出,用不到不扣。★题材 content_class 决定可用性:同一引擎可能动漫可用、写实真人暂不可用——按剧情实际画面选,别为了用某个模型改题材。",
+        "description": "★开场第二步(免费·只读·不需要剧号):按客户的基本视频参数,返回**当前可用**的三档模型套餐(省钱/标准/高品质)。每档给:图片模型+视频引擎+分辨率、效果说明(effect)、实时预估(estimate:每集与全剧的 typical 通常花费与 upper 上界,breakdown 分项)、warnings(所选模型近期繁忙/失败偏多)、substitutions(本档首选模型暂不可用、退到后备组合的原因)。某档 available=false 表示该档模型当前都不可用(unavailable_reason 说明),别推荐它。estimate=null 表示价格服务暂时取不到实时单价——如实告诉客户「暂时估不出」,别自己编数字。estimate 已含文本步(剧本改写、拆镜、分镜补全,按每镜约 360 点估,breakdown 的 text 项)。not_included 列出不在预估里的花费(配音配乐、质检重出与审核拒绝后的重出),一并讲给客户;质检重出不进上界,由「自动追加」额度兜底。★建议预算:每档 recommended_budget = (该档 estimate.total.upper − breakdown 的 text 项) × 1.2 + text 项(文本不放大);菜单的 recommended_overrun_pct=30 是建议的追加档位。向客户**默认建议**「预算 = recommended_budget、追加 30%」(budget_advice 是现成的说法),说明这只是建议,预算与追加比例由客户决定(追加可选 0/10/20/30/50)。★**镜结构要传**:短镜多的片子(每镜 2~3 秒)只给分钟数会严重少报——视频按单镜计费,短于引擎最低计费秒数的镜按最低秒数计(Seedance 与 MiniMax H3 4 秒、可灵 4.0 3 秒、WAN 3.0 2 秒)。建剧前问清或按剧本估出每集大约几镜,传 shots_per_episode(或 avg_shot_sec);传了之后 estimate.video_billing 给出平均镜长、该引擎最低计费秒数与单镜点数,breakdown 的 video 项说明里写明短镜怎么计,一并讲给客户。不传仍按每镜约 5.3 秒折算。availability 是全部模型对该题材的实时可用性(由管理控制台开关决定、随时可能变,专业客户自选模型时用,unavailable 的不能选;unavailable 项带 customer_note 与 expected_until,原样转告客户,别自己编原因或日期)。★专业客户自选模型:带 custom(图片模型+视频引擎+分辨率)再调一次,返回体多一个 custom(可用性+实时预估);把 custom.estimate 讲给客户,确认时把 custom.estimate.total.upper 作为 expected_total_upper 原样带回。★「历史上多少剧会用到追加」平台目前不提供:**不许**自己估一个比例或数字给客户;客户问追加会不会用到,只说明追加额度用于兜底质检重出、审核拒绝后的重出,用不到不扣。★题材 content_class 决定可用性:同一引擎可能动漫可用、写实真人暂不可用——按剧情实际画面选,别为了用某个模型改题材。",
         "tags": [
           "production-menu"
         ],
@@ -13029,7 +13541,17 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 30,
-                    "description": "每集时长(分钟),预估按每镜约 5.3 秒折算镜数"
+                    "description": "每集时长(分钟);不传 shots_per_episode / avg_shot_sec 时按每镜约 5.3 秒折算镜数"
+                  },
+                  "shots_per_episode": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  },
+                  "avg_shot_sec": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 60
                   },
                   "aspect_ratio": {
                     "type": "string"

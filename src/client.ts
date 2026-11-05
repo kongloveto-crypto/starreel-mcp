@@ -23,6 +23,7 @@ const MIME_BY_EXT: Record<string, string> = {
   '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.m4v': 'video/x-m4v',
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac',
   '.ogg': 'audio/ogg', '.flac': 'audio/flac',
+  '.cube': 'text/plain',
 }
 
 const AUTH_BASE = process.env.STARREEL_AUTH_BASE ?? 'https://api.shortreelai.com'
@@ -223,7 +224,7 @@ export class StarReelClient {
    * 本地文件 → 我方 COS:presign(门面 /upload-url)→ 直传字节到预签名 URL → 返回 public_url。
    * 字节不经我们的业务服务器,只走 COS。kind: image(默认)/video(参考视频)/audio/footage(实拍素材整段视频,额度更大)。
    */
-  async uploadLocalFile(filePath: string, kind: 'image' | 'video' | 'audio' | 'footage' = 'image'): Promise<string> {
+  async uploadLocalFile(filePath: string, kind: 'image' | 'video' | 'audio' | 'footage' | 'lut' = 'image'): Promise<string> {
     // v0.1.37 — P0③:媒体扩展名白名单 + 隐藏/系统目录拒绝(realpath 后判,防符号链接绕过)。
     const safePath = assertSafeLocalMediaPath(filePath, kind)
     filePath = safePath

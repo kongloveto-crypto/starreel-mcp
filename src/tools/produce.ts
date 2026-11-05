@@ -440,6 +440,36 @@ const VIDEO_ENGINES = ['seedance-2.5', 'hailuo-3', 'wan3.0', 'wan3.0-prime', 'kl
 // 「项目设定页」通用视觉/音频/字幕/转场设定 —— create_drama 与 update_project_settings 共用。
 // 后端内部 PUT /dramas 已接受写库,facade 白名单 Wave3 已放行(produce-create-fields.ts)。
 // 不含内部产线/成本开关(strict_mode/best_of_n/shoppable/budget_points 等,需产品决策)。
+/** update_project_settings 的 color_lut 说明(参数与工具描述共用,防两处漂移)。 */
+const COLOR_LUT_DESC =
+  '整片调色(终拼时施加,在烧字幕之前,字幕保持原色;不重出视频、不扣费,下次 compose_episode / rerender_episode 生效;' +
+  '改了调色平台会自动作废已烤进旧调色的单镜合成片,终拼按新调色重来)。取值二选一:' +
+  '① 风格预设名 teal_orange / bleach_bypass / kodachrome / cool_night / warm_natural / high_key_pastel / mono_doc / fashion_film;' +
+  '② 客户自带 3D LUT:先 upload_image(file_path=本地 .cube, kind=lut) 上传,把返回的地址填这里——只收本人上传到平台的 .cube,' +
+  '外部链接不收;设置时平台会下载校验(须 LUT_3D_SIZE 2~65 的 3D 表,不收 1D 表),坏表当场 400。强度请烘焙进 .cube(平台按满强度施加)。' +
+  '传 null 清除。当前值见 get_drama 的 color_lut。'
+
+/** 水印元素的出现时段(台标与文字角标共用)。不给 end_s = 常驻全片。 */
+const WM_TIMING_FIELDS = {
+  start_s: z.number().min(0).max(7200).optional().describe('出现时刻(秒,成片时间轴),默认 0;要给就必须同时给 end_s'),
+  end_s: z.number().min(0.1).max(7200).optional().describe('消失时刻(秒);不给 = 常驻全片'),
+  fade_s: z.number().min(0).max(10).optional().describe('淡入、淡出各多少秒,默认 0(超过半个时段按半个时段算)'),
+}
+/** 文字角标元素(set_drama_watermark 的 title / handle)。 */
+const WM_TEXT_ELEMENT = z.object({
+  text: z.string().min(1).max(60).describe('角标文字(1~60 字)'),
+  font: z.enum(['brush', 'gothic']).optional().describe('brush=毛笔楷(片名默认) / gothic=得意黑(署名默认)'),
+  vertical: z.boolean().optional().describe('竖排(一字一行);片名默认 true,署名默认 false'),
+  font_size: z.number().int().min(8).max(200).optional().describe('字号 px(720p 基准);片名默认 46,署名默认 30'),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional().describe('#RRGGBB,默认白'),
+  opacity: z.number().min(0).max(1).optional().describe('不透明度 0–1,默认 0.92'),
+  gravity: z.enum(['NorthEast', 'NorthWest', 'SouthEast', 'SouthWest']).optional().describe('角落;片名默认 NorthEast 右上,署名默认 SouthWest 左下'),
+  margin_x: z.number().int().min(0).max(400).optional().describe('距左右边 px(720p 基准)'),
+  margin_y: z.number().int().min(0).max(400).optional().describe('距上下边 px(720p 基准)'),
+  line_spacing: z.number().int().min(0).max(100).optional().describe('行距/字距 px(720p 基准)'),
+  ...WM_TIMING_FIELDS,
+})
+
 const PROJECT_SETTINGS_FIELDS = {
   // 剧级输出语言：改写 / 分镜 / 审计理由 / 摘要等面向观众与创作者的文本，以及 Whisper 转写语言都按它走。
   // 不设 = 按剧本文字自动推断（汉字 → zh-CN、假名 → ja、谚文 → ko、拉丁字母 → en；西/葡/法靠字母分不出，要显式设）。
@@ -1623,6 +1653,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     'quote_videos',
     '报价:给某一集批量出视频要多少点(与实际扣费同函数,较准)。返回 estimated_points、quote_id。零扣费。' +
       '⚠️ 视频是大额花费,务必把点数清楚告诉用户并等其确认。' +
+      '\n★分辨率:成片画布按剧的画幅定(如 16:9 = 1920x1080),镜头源分辨率由所选视频模型 / resolution 决定(如 720p = 1280x720);源低于画布时成片是**放大**出来的、不增加实际清晰度,报价时一并讲给客户。' +
+      '\n★**shot_billing = 逐镜计费明细**(duration_sec 镜长 / billed_sec 计费秒数 / points):视频按厂商实际出片秒数计费,短于引擎最低计费秒数的镜按最低秒数计' +
+      '(Seedance 与 MiniMax H3 4 秒、可灵 4.0 3 秒、WAN 3.0 2 秒),成片仍按镜长剪辑。advisories 出现 short_shot_min_billing 就把它的说明原样讲给客户' +
+      '(多少镜、多计几秒、为什么比按镜长算的贵),客户要省就合并相邻短镜成场景组或换引擎后重新报价。' +
       '\n★**frame_delivery = 本次逐镜真正送到厂商的帧**:列出有独立尾帧的计价镜,以及首帧不送达的计价镜(带 reason,如 reference_video_exclusive=挂了定妆视频锚/运动参考);' +
       'first_frame.verified=false = 预览没跑完、送不送未核验,别当已送达讲,可逐镜 quote_regenerate_shot_video 核对;没列出的计价镜 = 已核验首帧照常送达、无独立尾帧。advisories 里出现 av_anchor_strips_frames = 这些镜被角色定妆视频锚剥掉首尾帧,' +
       '把镜号讲给客户,要保住首尾帧就 get_av_anchors 看来源、客户同意后 clear_character_av_anchor 摘锚再重新报价。' +
@@ -1683,6 +1717,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '响应里的 advisories(时长偏差/孤儿任务/缺TTS/post_production_pending 后期特效未完成)只提醒不阻断,建议逐条处理后再拼。发起后用 get_final_cut 轮询。' +
       REVIEW_GATE_HINT('review_videos', '视频与配音') +
       '\n' + PRE_COMPOSE_CHECK_HINT +
+      '\n★成片时长 ≠ 分镜合计:每道非硬切转场(叠化等)会把相邻两镜重叠掉转场时长(7 道 300ms 叠化 ≈ 少 2.1s)。回执的 declared_total_s 是分镜合计,不是成片时长;' +
+      '成片实测时长、差值与来源看 get_final_cut / review_final_cut 的 duration_check。要成片时长等于分镜合计就用硬切(default_transition=cut)。' +
+      '\n★分辨率:成片画布按剧的画幅定(如 16:9 = 1920x1080),镜头源分辨率由所选视频模型 / resolution 决定(如 720p = 1280x720);源低于画布时成片是**放大**出来的、不增加实际清晰度——get_final_cut 的 resolution 会写明。' +
       '\n★【完成后质检·免费】成片出来后跑 review_final_cut(缺镜/字幕放不下/身份锚/跳轴/错别字,proofread=false 则不扣费),' +
       '结论讲给客户;客户确认后才 confirm_delivery_acceptance' + ALWAYS_ASK('交付验收') + '。force 只越过终拼预检,不越过审查闸。',
     {
@@ -1698,6 +1735,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'get_final_cut',
     '查某一集成片状态与下载链接。status=completed 时返回 download_url(我方 COS 直链,可直接下载)。免费。' +
+      '★duration_sec = 成片文件实测时长(秒,保留两位小数,不取整)。duration_check = 分镜合计 declared_total_s / 实测 actual_duration_s / 差值 delta_s 与来源 causes(transition_overlap=转场重叠,other=片长与声明不符);差值超过 5% 带 warning 与 suggestion,原样讲给客户——按分镜时长做配乐 / 口播的客户最容易踩。' +
+      '★resolution = 成片分辨率 / 镜头源分辨率,upscaled=true 表示成片是放大出来的,要讲给客户。' +
       '★bgm_stale=true 表示配乐在成片之后生成/改动、尚未进成片:重新 compose_episode(免费)即可,别用 re-render。' +
       '★若设过当前交付版(register_external_delivery 登记的外部版,或 set_current_delivery 指定的平台版),另返回 delivery——那才是客户实际收到的一版;download_url 仍是平台最新一次拼的成片。' +
       '要看每一版成片用了什么、哈希是多少,用 list_deliveries。' +
@@ -1715,7 +1754,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     'review_final_cut',
     '**成片体检**:导出前把整集过一遍——没出图的镜、字幕一屏放不下、人物没有身份锚、'
       + '镜头连续性(跳轴)、以及一次错别字通读。'
-      + '\n★**建议式,不阻断**:can_export=false 只代表有 block 级问题值得先看,'
+      + '\n★同时给 duration_check(成片实测时长 vs 分镜合计、差值来源)与 resolution(成片 vs 镜头源分辨率、是否放大);'
+      + '差值超过 5% 会多一条 final_cut_shorter_than_storyboard / final_cut_longer_than_storyboard 的 warn。'      + '\n★**建议式,不阻断**:can_export=false 只代表有 block 级问题值得先看,'
       + '平台不会拦着你 compose_episode / get_export。把 findings 逐条讲给客户'
       + '(code=问题类型、shots=命中的镜号、action=该调哪个工具去修),**由客户决定修还是照发**。'
       + '\n★费用:本身免费,但默认会跑一次 LLM 错别字通读——那一步**要花钱**。'
@@ -2201,7 +2241,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★aspect_ratio 除固定档外可设自由宽高比(数值如 2.35,只支持 Seedance 2.5 + Seedream + 非 4k、按剧灰度,未开通回 400),详见该参数说明。' +
       '★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);' +
       'reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。' +
-      '★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):' + AUTO_DERIVE_ASSETS_EFFECT,
+      '★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):' + AUTO_DERIVE_ASSETS_EFFECT +
+      '★color_lut 是整片调色(终拼时对全片施加,字幕不受影响):' + COLOR_LUT_DESC,
     {
       drama_id: z.number().int().positive(),
       auto_derive_assets: z.boolean().optional().describe(
@@ -2239,6 +2280,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       // MV 专属
       mv_lyrics: z.string().optional(),
       mv_audio_url: z.string().optional(),
+      color_lut: z.string().nullable().optional().describe(COLOR_LUT_DESC),
       ...PROJECT_SETTINGS_FIELDS,
     },
     async (args) => {
@@ -2343,10 +2385,11 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'upload_image',
     '把本地图片上传到我方 COS,返回 image_url(字节直传 COS、不过业务服务器)。' +
-      '用于给视频编辑当参考图,或先拿 URL 再登记。免费。',
+      '用于给视频编辑当参考图,或先拿 URL 再登记(台标 set_drama_logo 只收这里返回的地址)。' +
+      'kind=lut 上传 .cube 调色查找表,返回地址填进 update_project_settings 的 color_lut。免费。',
     {
       file_path: z.string().describe('本地图片绝对路径(jpg/png/webp)'),
-      kind: z.enum(['image', 'video', 'audio']).optional().describe('默认 image;视频编辑的参考视频/音频可选 video/audio'),
+      kind: z.enum(['image', 'video', 'audio', 'lut']).optional().describe('默认 image;视频编辑的参考视频/音频可选 video/audio;剧级调色查找表(.cube,给 update_project_settings 的 color_lut)选 lut'),
     },
     async ({ file_path, kind }) => {
       const url = await client.uploadLocalFile(file_path, kind ?? 'image')
@@ -3476,6 +3519,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       candidates: z.number().int().min(1).max(3).optional()
         .describe('每幕出几首完整候选(1~3,默认 1)。≥2 时每首单独计费,必须带 quote_bgm_candidates 拿到的 quote_id'),
       quote_id: z.string().optional().describe('candidates≥2 时必填:quote_bgm_candidates 返回的报价凭证(一次性,15 分钟有效)'),
+      replace_own_bgm: z.boolean().optional().describe(
+        '本集已挂客户自有配乐(set_own_bgm)时,生成会被 409 拦下(否则两段音乐叠放)。客户明确要改用 AI 配乐才传 true:新 AI 配乐生成落库后自动摘掉本集自有配乐段(生成失败则保留)',
+      ),
       director: z.object({
         ...BGM_LOCK_FIELDS,
         acts: z.array(z.object({
@@ -3485,14 +3531,68 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
         // strict:拼错的字段(如 tempo)要报校验错误;zod 默认会静默剥掉它,转发出去的就是空锁 ⇒ 一次不受控的扣费生成
       }).strict().nullable().optional().describe('结构化锁定(硬约束),按集保存:传了就记下,下次不传沿用上次的;传 null 清除。顶层字段整集生效'),
     },
-    async ({ episode_id, prompt, prompt_mode, director, candidates, quote_id }) =>
+    async ({ episode_id, prompt, prompt_mode, director, candidates, quote_id, replace_own_bgm }) =>
       jsonResult(await client.producePost(`/episodes/${episode_id}/bgm`, {
         ...(prompt === undefined ? {} : { prompt }),
         ...(prompt_mode ? { prompt_mode } : {}),
         ...(director === undefined ? {} : { director }),
         ...(candidates === undefined ? {} : { candidates }),
         ...(quote_id ? { quote_id } : {}),
+        ...(replace_own_bgm ? { replace_own_bgm: true } : {}),
       })),
+  )
+  server.tool(
+    'set_own_bgm',
+    '把**客户自己的音乐**挂成本集(或整剧)配乐(免费;只做一次音频解析)。适用:MV、广告、品牌片等客户自带配乐。' +
+      '★★只能用客户自有或已获授权的音频:调用前必须向客户确认这段音乐的版权/授权(商用授权、平台播放授权),' +
+      '确认后才带 rights_confirmed:true;拿不准就先问,别替客户假设。网上下载的流行歌、影视原声不能用。' +
+      '传本地文件(file_path,自动上传)或已上传的音频地址(audio_url,须是本人经 upload-url kind=audio 直传的)或已登记的曲目(track_id,来自 list_bgm_cues),三选一。' +
+      '默认 align_to_start=true:从成片第 0 秒起、从音频第 0 秒开始放,覆盖全片(曲内起点 0、不平移、淡入 0);' +
+      '要跳过前奏传 track_offset_ms;要只挂某几镜或晚点进,传 align_to_start:false + sb_from/sb_to/start_shift_ms。' +
+      'gain_db 不传=跟随本集/整剧配乐音量档(set_episode_audio);音频比成片短时放完即停、结尾那段没有配乐(不从头循环,响应 warnings 会说)。' +
+      '★MV 项目不用本工具(409):MV 的歌是主音轨,建剧时用 mv_audio_url 传入。' +
+      '默认替换本集原有配乐段(含 AI 配乐);本剧有整剧共用段时会 409,按提示选 replace_shared / scope="drama"。' +
+      '响应 will_play=false 时看 blockers(如本剧 bgm_enabled=false),按提示用 update_project_settings / set_episode_audio 打开。' +
+      '挂上后 list_bgm_cues(source=customer)与 get_bgm_status(customer_tracks)都能看到;compose_episode 重新合成后进成片(rerender_episode 不会带上)。' +
+      '★别再关掉平台配乐、本地 ffmpeg 混音后 register_external_delivery——那样交付来源变成「未知」,追溯链断掉。之后若改用 AI 配乐,generate_bgm 带 replace_own_bgm:true。',
+    {
+      episode_id: z.number().int().positive(),
+      rights_confirmed: z.literal(true).describe('客户已确认这段音频是自有或已获授权的(必须为 true,否则 400)'),
+      file_path: z.string().optional().describe('本地音频路径(MP3/WAV/M4A/AAC/OGG/FLAC;自动上传)'),
+      audio_url: z.string().optional().describe('已经用 upload-url(kind=audio)直传拿到的 public_url'),
+      track_id: z.number().int().positive().optional().describe('已登记的客户曲目 id(list_bgm_cues 里 source=customer 那条的 bgm_track_id;AI/曲库曲目会 400)'),
+      name: z.string().max(200).optional().describe('曲目名(给客户看的,不填用文件名)'),
+      scope: z.enum(['episode', 'drama']).optional().describe('episode=只挂本集(默认);drama=整剧每一集共用(会替换整剧所有配乐段)'),
+      align_to_start: z.boolean().optional().describe('默认 true:从成片第 0 秒对齐、覆盖全片。false 才能用 sb_from/sb_to/start_shift_ms'),
+      sb_from: z.number().int().min(0).optional().describe('align_to_start=false 时:从第几镜开始(镜号)'),
+      sb_to: z.number().int().min(0).optional().describe('align_to_start=false 时:到第几镜结束(镜号)'),
+      track_offset_ms: z.number().int().min(0).max(600000).optional().describe('从音频第几毫秒开始放(跳过前奏用;默认 0)'),
+      start_shift_ms: z.number().int().min(0).max(60000).optional().describe('align_to_start=false 时:在覆盖段第一镜开始后再晚多少毫秒进'),
+      gain_db: z.number().min(-60).max(0).optional().describe('配乐音量(dB,-60~0);不传跟随音量档'),
+      fade_in_ms: z.number().int().min(0).max(15000).optional().describe('淡入毫秒(对齐模式默认 0,否则 1500)'),
+      fade_out_ms: z.number().int().min(0).max(15000).optional().describe('淡出毫秒(默认 1500)'),
+      replace_existing: z.boolean().optional().describe('默认 true:替换本集原有配乐段。false=叠放(一般不要)'),
+      replace_shared: z.boolean().optional().describe('只换本集时连整剧共用段一起删(其他集也会失去那段配乐)'),
+    },
+    async ({ episode_id, file_path, audio_url, ...rest }) => {
+      const url = audio_url && audio_url.trim()
+        ? audio_url.trim()
+        : (file_path ? await client.uploadLocalFile(file_path, 'audio') : '')
+      if (!url && rest.track_id == null) throw new Error('file_path / audio_url / track_id 至少提供一个')
+      return jsonResult(await client.producePut(`/episodes/${episode_id}/own-bgm`, { ...rest, ...(url ? { audio_url: url } : {}) }))
+    },
+  )
+  server.tool(
+    'remove_own_bgm',
+    '摘掉本集挂的客户自有配乐段(免费;只动 set_own_bgm 挂的客户音乐,AI 配乐段不动;曲目文件仍在,可再用 track_id 挂回)。' +
+      'scope="drama" 连整剧共用的客户配乐段一起摘(影响每一集)。改完 compose_episode 重新合成才生效。',
+    {
+      episode_id: z.number().int().positive(),
+      scope: z.enum(['episode', 'drama']).optional().describe('episode=只摘本集专属段(默认);drama=连整剧共用段一起摘'),
+    },
+    async ({ episode_id, scope }) =>
+      // scope 始终显式带上：OpenAPI 生成器按探测到的 query 串出参数，省略默认值会让 REST 客户端看不到 scope（PR#1498 Codex P2）
+      jsonResult(await client.produceDelete(`/episodes/${episode_id}/own-bgm?scope=${scope === 'drama' ? 'drama' : 'episode'}`)),
   )
   server.tool(
     'quote_bgm_candidates',
@@ -3550,7 +3650,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'list_bgm_cues',
     '列出本集的配乐段(AI 配乐按情绪分幕,每段覆盖一段镜号 sb_from~sb_to):id、覆盖范围、gain_db(null=跟随音量档)、fade_in_ms / fade_out_ms、track_offset_ms / start_shift_ms(null=系统决定)。' +
-      'episode_id 为 null 的是**整剧共用段**,改它会影响所有集。免费。',
+      'episode_id 为 null 的是**整剧共用段**,改它会影响所有集。source:ai=AI 配乐 / library=公共曲库 / customer=客户自有(set_own_bgm)。免费。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/bgm-cues`)),
   )
@@ -3708,6 +3808,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'get_bgm_status',
     '查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数。免费。' +
+      'customer_tracks 列出客户自有配乐(set_own_bgm 挂的);它非空说明本集已有配乐,别再 generate_bgm。' +
       '配乐 done 后需重新 compose_episode 才进成片。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/bgm-status`)),
@@ -3852,6 +3953,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       'not_included 列出不在预估里的花费(配音配乐、质检重出与审核拒绝后的重出),一并讲给客户;质检重出不进上界,由「自动追加」额度兜底。' +
       '★建议预算:每档 recommended_budget = (该档 estimate.total.upper − breakdown 的 text 项) × 1.2 + text 项(文本不放大);菜单的 recommended_overrun_pct=30 是建议的追加档位。' +
       '向客户**默认建议**「预算 = recommended_budget、追加 30%」(budget_advice 是现成的说法),说明这只是建议,预算与追加比例由客户决定(追加可选 0/10/20/30/50)。' +
+      '★**镜结构要传**:短镜多的片子(每镜 2~3 秒)只给分钟数会严重少报——视频按单镜计费,短于引擎最低计费秒数的镜按最低秒数计' +
+      '(Seedance 与 MiniMax H3 4 秒、可灵 4.0 3 秒、WAN 3.0 2 秒)。建剧前问清或按剧本估出每集大约几镜,传 shots_per_episode(或 avg_shot_sec);' +
+      '传了之后 estimate.video_billing 给出平均镜长、该引擎最低计费秒数与单镜点数,breakdown 的 video 项说明里写明短镜怎么计,一并讲给客户。不传仍按每镜约 5.3 秒折算。' +
       'availability 是全部模型对该题材的实时可用性(由管理控制台开关决定、随时可能变,专业客户自选模型时用,unavailable 的不能选;unavailable 项带 customer_note 与 expected_until,原样转告客户,别自己编原因或日期)。' +
       '★专业客户自选模型:带 custom(图片模型+视频引擎+分辨率)再调一次,返回体多一个 custom(可用性+实时预估);把 custom.estimate 讲给客户,确认时把 custom.estimate.total.upper 作为 expected_total_upper 原样带回。' +
       '★「历史上多少剧会用到追加」平台目前不提供:**不许**自己估一个比例或数字给客户;客户问追加会不会用到,只说明追加额度用于兜底质检重出、审核拒绝后的重出,用不到不扣。' +
@@ -3859,7 +3963,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     {
       content_class: z.enum(['realistic_human', 'stylized', 'product']).describe('题材:realistic_human 写实真人 / stylized 动漫·风格化 / product 产品·空镜'),
       episodes: z.number().int().min(1).max(200).describe('集数'),
-      minutes_per_episode: z.number().positive().max(30).describe('每集时长(分钟),预估按每镜约 5.3 秒折算镜数'),
+      minutes_per_episode: z.number().positive().max(30).describe('每集时长(分钟);不传 shots_per_episode / avg_shot_sec 时按每镜约 5.3 秒折算镜数'),
+      shots_per_episode: z.number().int().min(1).max(500).optional().describe('每集预计镜数。知道大概镜数就传(短镜多的片子尤其要传):平均镜长 = 每集秒数 ÷ 镜数,短于引擎最低计费秒数的镜按最低秒数估价'),
+      avg_shot_sec: z.number().min(0.5).max(60).optional().describe('平均镜长(秒)。只知道镜长不知道镜数时传它,镜数 = 每集秒数 ÷ 平均镜长;与 shots_per_episode 同传则两者都按传的值'),
       aspect_ratio: z.string().optional().describe('画幅,如 9:16 / 16:9(只影响视频报价)'),
       assets: z.object({
         characters: z.number().int().min(0).max(100).optional(),
@@ -3920,6 +4026,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       max_fix_rounds: z.number().int().min(0).max(5).optional().describe('托管环节每层最多自修几轮(默认 3);到上限仍有问题就暂停、汇总问客户'),
       episodes: z.number().int().min(1).max(200),
       minutes_per_episode: z.number().positive().max(30),
+      shots_per_episode: z.number().int().min(1).max(500).optional().describe('调 get_production_menu 时传过就原样再传一次,否则重算的预估对不上客户看到的'),
+      avg_shot_sec: z.number().min(0.5).max(60).optional().describe('同上:调 get_production_menu 时传过就原样再传'),
     },
     async ({ drama_id, ...body }) => jsonResult(await client.producePost(`/dramas/${drama_id}/production-plan`, body)),
   )
@@ -4140,8 +4248,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'set_drama_logo',
     '设置本剧成片的图片台标(角标 logo),终拼时叠在全片字幕之上、整片可见。免费、不重出视频。'
-      + '先 upload_image 上传台标(建议透明底 PNG)拿到 URL 再传 src。尺寸/边距按 720p 高度基准、渲染时按成片高度等比缩放'
-      + '(例:1080×1920 竖屏要宽约 260px → width≈98)。改完 compose_episode / rerender_episode 生效。传 logo:null 清除台标。',
+      + '先 upload_image 上传台标(建议透明底 PNG)拿到 URL 再传 src——★只收本人经 upload_image 上传的平台地址,外部链接 400。'
+      + '尺寸/边距按 720p 高度基准、渲染时按成片高度等比缩放'
+      + '(例:1080×1920 竖屏要宽约 260px → width≈98)。默认常驻全片;给 end_s(可带 start_s / fade_s)则只在该时段出现并淡入淡出。'
+      + '改完 compose_episode / rerender_episode 生效。传 logo:null 清除台标。文字角标(书法片名/署名)用 set_drama_watermark。',
     {
       drama_id: z.number().int().positive(),
       src: z.string().url().optional().describe('台标图片 URL(http/https,upload_image 返回的地址)'),
@@ -4150,11 +4260,39 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       gravity: z.enum(['NorthEast', 'NorthWest', 'SouthEast', 'SouthWest']).optional().describe('角落:NorthEast 右上(默认)/ NorthWest 左上 / SouthEast 右下 / SouthWest 左下'),
       margin_x: z.number().int().min(0).max(200).optional().describe('距左右边 px(720p 基准),默认 14'),
       margin_y: z.number().int().min(0).max(200).optional().describe('距上下边 px(720p 基准),默认 14'),
+      ...WM_TIMING_FIELDS,
       logo: z.null().optional().describe('传 null 清除台标(此时别传 src)'),
     },
     async ({ drama_id, ...fields }) => {
       const payload = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined))
       return jsonResult(await client.producePut(`/dramas/${drama_id}/logo`, payload))
+    },
+  )
+  server.tool(
+    'get_drama_watermark',
+    '读本剧成片的片角文字角标(title 片名 / handle 署名)与图片台标的当前设置。免费。各项 null = 没设。',
+    { drama_id: z.number().int().positive() },
+    async ({ drama_id }) => jsonResult(await client.produceGet(`/dramas/${drama_id}/watermark`)),
+  )
+  server.tool(
+    'set_drama_watermark',
+    '设置本剧成片的**片角文字角标**:title(片名,默认毛笔楷 brush、竖排、右上角)与 handle(署名/账号,默认得意黑 gothic、横排、左下角)。' +
+      '终拼时叠在画面与字幕之上(全剧每集成片都带),免费、不重出视频,下次 compose_episode / rerender_episode 生效。' +
+      '例:右下角横排书法片名、只在开头 5 秒出现并淡入淡出 → title={text:片名, font:\'brush\', vertical:false, gravity:\'SouthEast\', end_s:5, fade_s:0.5}。' +
+      '不给 end_s = 常驻全片。只传要改的那一项,另一项不动;传 null 清除该项。' +
+      '★区别:这是**叠在画面上的角标**(不占时长);set_episode_poster_card / 片头卡(cover_card_default)是**接在片头/片尾的独立画面**;' +
+      'set_shot_name_card 是某一镜的人物名牌;图片 logo 用 set_drama_logo。' +
+      '尺寸/边距按 720p 高度基准、渲染时按成片高度等比缩放。',
+    {
+      drama_id: z.number().int().positive(),
+      title: WM_TEXT_ELEMENT.nullable().optional().describe('片名角标;null 清除'),
+      handle: WM_TEXT_ELEMENT.nullable().optional().describe('署名/账号角标;null 清除'),
+    },
+    async ({ drama_id, title, handle }) => {
+      const payload: Record<string, unknown> = {}
+      if (title !== undefined) payload.title = title
+      if (handle !== undefined) payload.handle = handle
+      return jsonResult(await client.producePut(`/dramas/${drama_id}/watermark`, payload))
     },
   )
   server.tool(
