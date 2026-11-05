@@ -447,6 +447,7 @@ const COLOR_LUT_DESC =
   '① 风格预设名 teal_orange / bleach_bypass / kodachrome / cool_night / warm_natural / high_key_pastel / mono_doc / fashion_film;' +
   '② 客户自带 3D LUT:先 upload_image(file_path=本地 .cube, kind=lut) 上传,把返回的地址填这里——只收本人上传到平台的 .cube,' +
   '外部链接不收;设置时平台会下载校验(须 LUT_3D_SIZE 2~65 的 3D 表,不收 1D 表),坏表当场 400。强度请烘焙进 .cube(平台按满强度施加)。' +
+  '③ 客户只有色调参考图、没有 .cube:用 match_color_lut 由平台按参考图生成匹配的 .cube(免费),把返回的 lut_url 填这里(或该工具带 apply:true 直接写入)。' +
   '传 null 清除。当前值见 get_drama 的 color_lut。'
 
 /** 水印元素的出现时段(台标与文字角标共用)。不给 end_s = 常驻全片。 */
@@ -4238,6 +4239,28 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     },
     async ({ episode_id, ...rest }) =>
       jsonResult(await client.producePut(`/episodes/${episode_id}/era-contract`, rest)),
+  )
+  server.tool(
+    'match_color_lut',
+    '按客户的**色调参考图**生成匹配的整片调色表(3D LUT .cube)——客户说「照这张图/这段视频的色调调」却没有现成 .cube 时用。免费、不调模型、不重出视频。' +
+      '做法:把本剧若干镜头首帧与参考图转到 Lab 色彩空间,按均值/标准差做色彩迁移,烘焙成 17 或 33 阶 .cube,传到平台并登记为你本人的调色表。' +
+      '步骤:先 upload_image(参考图,kind=image) 拿 image_url → 本工具 → 把返回的 lut_url 填 update_project_settings(color_lut),或直接带 apply:true 写入本剧。' +
+      '参考视频:先截一帧有代表性的画面当参考图。返回 delta_e_before / delta_e_after(本剧帧与参考的整体色差,套表前/后),after 明显小于 before 才说明在往参考靠;' +
+      '客户嫌太猛就调低 strength 重生成(每次都是新地址,旧的不影响)。本剧须已有镜头首帧(先 generate_frames);只收平台上本人上传的参考图,外部链接不收。' +
+      '★生效时机同 color_lut:下次 compose_episode / rerender_episode 生效,已烤旧调色的合成片会自动作废(有口型片的集除外)。',
+    {
+      drama_id: z.number().int().positive(),
+      reference_image_url: z.string().url().describe('参考图地址(upload_image 返回的 image_url;外部链接不收)'),
+      strength: z.number().min(0).max(1).optional().describe('迁移强度 0~1,默认 0.8(1=完全贴参考色调,0=不变)'),
+      lut_size: z.union([z.literal(17), z.literal(33)]).optional().describe('LUT 阶数,默认 33(更细);17 更小更快'),
+      storyboard_ids: z.array(z.number().int().positive()).min(1).max(12).optional()
+        .describe('用哪些镜头的首帧统计本剧现有色调(1~12 个,须属本剧且有首帧);不传=自动从本剧均匀取 8 张'),
+      apply: z.boolean().optional().describe('true=生成后直接写入本剧 color_lut;默认 false 只返回 lut_url'),
+    },
+    async ({ drama_id, ...fields }) => {
+      const payload = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined))
+      return jsonResult(await client.producePost(`/dramas/${drama_id}/color-lut/match`, payload))
+    },
   )
   server.tool(
     'get_drama_logo',

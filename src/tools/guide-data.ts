@@ -327,7 +327,7 @@ export const PIPELINE: PipelineStep[] = [
   },
   {
     step: '10 成片与交付',
-    tools: ['compose_episode', 'get_final_cut', 'get_export', 'rerender_episode', 'get_deliverables', 'generate_deliverables', 'render_multi_aspect', 'generate_effects', 'generate_transitions', 'set_drama_logo', 'get_drama_logo', 'set_drama_watermark(片角文字角标:书法片名/署名,可限时段淡入淡出)', 'get_drama_watermark', 'update_project_settings(color_lut 整片调色:预设或自带 .cube)', 'generate_episode_poster', 'get_episode_poster_card', 'set_episode_poster_card(片尾海报卡:片尾 logo / KV / 二维码 + CTA)', 'generate_drama_poster', 'generate_cover', 'translate_subtitles', 'get_pipeline_status'],
+    tools: ['compose_episode', 'get_final_cut', 'get_export', 'rerender_episode', 'get_deliverables', 'generate_deliverables', 'render_multi_aspect', 'generate_effects', 'generate_transitions', 'set_drama_logo', 'get_drama_logo', 'set_drama_watermark(片角文字角标:书法片名/署名,可限时段淡入淡出)', 'get_drama_watermark', 'update_project_settings(color_lut 整片调色:预设或自带 .cube)', 'match_color_lut(按参考图生成匹配的 .cube,免费)', 'generate_episode_poster', 'get_episode_poster_card', 'set_episode_poster_card(片尾海报卡:片尾 logo / KV / 二维码 + CTA)', 'generate_drama_poster', 'generate_cover', 'translate_subtitles', 'get_pipeline_status'],
     billing: '免费',
     note: '终拼免费(ffmpeg+COS);成片前用 `get_pipeline_status` 确认没有缺镜;配乐晚于成片(bgm_stale)重新 compose 即可。',
   },

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.308",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.308 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.309",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.309 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -1455,7 +1455,7 @@
       "put": {
         "operationId": "update_project_settings",
         "summary": "建剧后修改项目设定",
-        "description": "建剧后修改项目设定。除画幅/分辨率/世界观Brief/族裔/题材/导演风格外,现覆盖★整剧视觉一致性锚(摄影DNA cinematography_prompt/美术圣经 art_bible/视觉锁定 visual_lock/视频风格正负向词/视觉母题 motifs)、音频(bgm_source 自有vs原生/bgm_volume_preset 音量/use_clip_audio 用视频原声)、字幕(show_subtitles/双语 subtitle_secondary_lang/位置/边距/动效)、转场——即项目设定页全部通用设定。免费。⚠️ 世界观 Brief/族裔/画幅/一致性锚等改后,已生成的内容不会自动更新,需重生对应内容。★aspect_ratio 除固定档外可设自由宽高比(数值如 2.35,只支持 Seedance 2.5 + Seedream + 非 4k、按剧灰度,未开通回 400),详见该参数说明。★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):开着时 extract_assets 提取完会自动给有描述、还没有图的道具逐件出道具图(按张计费,不单独报价),图落库后再自动做一次道具外形分析(小额后付);拆分镜/导入分镜落库后也会自动补全分镜空字段、服装时间线与道具标注(文本步后付)。false=这些自动动作都不跑,道具照常落库但没有图,要图用 generate_prop_sheet 逐件出(或 upload_prop_sheet 传自有图),缺的辅助资产要手动补;已生成的内容不受影响。客户想先看报价再出图、或不想要平台自动出的道具图时关掉。★color_lut 是整片调色(终拼时对全片施加,字幕不受影响):整片调色(终拼时施加,在烧字幕之前,字幕保持原色;不重出视频、不扣费,下次 compose_episode / rerender_episode 生效;改了调色平台会自动作废已烤进旧调色的单镜合成片,终拼按新调色重来)。取值二选一:① 风格预设名 teal_orange / bleach_bypass / kodachrome / cool_night / warm_natural / high_key_pastel / mono_doc / fashion_film;② 客户自带 3D LUT:先 upload_image(file_path=本地 .cube, kind=lut) 上传,把返回的地址填这里——只收本人上传到平台的 .cube,外部链接不收;设置时平台会下载校验(须 LUT_3D_SIZE 2~65 的 3D 表,不收 1D 表),坏表当场 400。强度请烘焙进 .cube(平台按满强度施加)。传 null 清除。当前值见 get_drama 的 color_lut。",
+        "description": "建剧后修改项目设定。除画幅/分辨率/世界观Brief/族裔/题材/导演风格外,现覆盖★整剧视觉一致性锚(摄影DNA cinematography_prompt/美术圣经 art_bible/视觉锁定 visual_lock/视频风格正负向词/视觉母题 motifs)、音频(bgm_source 自有vs原生/bgm_volume_preset 音量/use_clip_audio 用视频原声)、字幕(show_subtitles/双语 subtitle_secondary_lang/位置/边距/动效)、转场——即项目设定页全部通用设定。免费。⚠️ 世界观 Brief/族裔/画幅/一致性锚等改后,已生成的内容不会自动更新,需重生对应内容。★aspect_ratio 除固定档外可设自由宽高比(数值如 2.35,只支持 Seedance 2.5 + Seedream + 非 4k、按剧灰度,未开通回 400),详见该参数说明。★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):开着时 extract_assets 提取完会自动给有描述、还没有图的道具逐件出道具图(按张计费,不单独报价),图落库后再自动做一次道具外形分析(小额后付);拆分镜/导入分镜落库后也会自动补全分镜空字段、服装时间线与道具标注(文本步后付)。false=这些自动动作都不跑,道具照常落库但没有图,要图用 generate_prop_sheet 逐件出(或 upload_prop_sheet 传自有图),缺的辅助资产要手动补;已生成的内容不受影响。客户想先看报价再出图、或不想要平台自动出的道具图时关掉。★color_lut 是整片调色(终拼时对全片施加,字幕不受影响):整片调色(终拼时施加,在烧字幕之前,字幕保持原色;不重出视频、不扣费,下次 compose_episode / rerender_episode 生效;改了调色平台会自动作废已烤进旧调色的单镜合成片,终拼按新调色重来)。取值二选一:① 风格预设名 teal_orange / bleach_bypass / kodachrome / cool_night / warm_natural / high_key_pastel / mono_doc / fashion_film;② 客户自带 3D LUT:先 upload_image(file_path=本地 .cube, kind=lut) 上传,把返回的地址填这里——只收本人上传到平台的 .cube,外部链接不收;设置时平台会下载校验(须 LUT_3D_SIZE 2~65 的 3D 表,不收 1D 表),坏表当场 400。强度请烘焙进 .cube(平台按满强度施加)。③ 客户只有色调参考图、没有 .cube:用 match_color_lut 由平台按参考图生成匹配的 .cube(免费),把返回的 lut_url 填这里(或该工具带 apply:true 直接写入)。传 null 清除。当前值见 get_drama 的 color_lut。",
         "tags": [
           "dramas"
         ],
@@ -2253,6 +2253,97 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/dramas/{drama_id}/color-lut/match": {
+      "post": {
+        "operationId": "match_color_lut",
+        "summary": "按客户的**色调参考图**生成匹配的整片调色表(3D LUT ",
+        "description": "按客户的**色调参考图**生成匹配的整片调色表(3D LUT .cube)——客户说「照这张图/这段视频的色调调」却没有现成 .cube 时用。免费、不调模型、不重出视频。做法:把本剧若干镜头首帧与参考图转到 Lab 色彩空间,按均值/标准差做色彩迁移,烘焙成 17 或 33 阶 .cube,传到平台并登记为你本人的调色表。步骤:先 upload_image(参考图,kind=image) 拿 image_url → 本工具 → 把返回的 lut_url 填 update_project_settings(color_lut),或直接带 apply:true 写入本剧。参考视频:先截一帧有代表性的画面当参考图。返回 delta_e_before / delta_e_after(本剧帧与参考的整体色差,套表前/后),after 明显小于 before 才说明在往参考靠;客户嫌太猛就调低 strength 重生成(每次都是新地址,旧的不影响)。本剧须已有镜头首帧(先 generate_frames);只收平台上本人上传的参考图,外部链接不收。★生效时机同 color_lut:下次 compose_episode / rerender_episode 生效,已烤旧调色的合成片会自动作废(有口型片的集除外)。",
+        "tags": [
+          "dramas"
+        ],
+        "parameters": [
+          {
+            "name": "drama_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reference_image_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "参考图地址(upload_image 返回的 image_url;外部链接不收)"
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "lut_size": {
+                    "type": "number",
+                    "enum": [
+                      17,
+                      33
+                    ]
+                  },
+                  "storyboard_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "minItems": 1,
+                    "maxItems": 12
+                  },
+                  "apply": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "reference_image_url"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "StarReel envelope",
