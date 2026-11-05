@@ -287,7 +287,7 @@ export const WORKFLOW_HINT =
   '逐镜/批量出帧的集平台多半没自动接过(get_storyboards 的 seam_state=unchained 就是),跳过它不报错——代价是镜与镜之间画面对不上,成片一处一个跳切。' +
   '接完还担心拼起来跳(人物左右位置、运动方向、景别对不上),出视频前可选 audit_seam_directions(查主体跳边/运动反向/景别跳级)(先 dry_run 报价,按 token 扣费,提示性不拦),结论用 get_seam_directions 读、讲给客户挑着修。' +
   '★★【尾帧别跳·出帧是两趟】generate_frames 默认只出首帧。约三成的镜**末态≠首态**(大运镜/物体脱手/状态改变),这些镜需要一张独立尾帧,而判据在平台侧、你从分镜文本猜不出来——' +
-  '所以首帧出完必须调一次免费的 tail_frame_plan 拿逐镜清单,再 frame_type=last_frame 补上(generate_frames 的响应体里 shots_needing_last_frame 就是这个数,不为 0 别直接去 review_frames)。' +
+  '所以首帧出完必须调一次免费的 tail_frame_plan 拿逐镜清单,再 frame_type=last_frame 补上(generate_frames 的响应体里 shots_needing_last_frame 只数**出视频时送得到**的尾帧,不为 0 别直接去 review_frames;last_frame_seam_anchor_only 是送不到视频、只当接缝锚的镜,不需要就别出)。' +
   '跳过不报错、不拦你——代价是那些镜出视频时只有首帧一个锚,末态由模型自由发挥:动作做不到位、大运镜结束又回到起点构图。生产实测 32 集里 30 集整集只出了首帧,其中 23 集一路出完了视频。' +
   '★★【尾帧被 TERMINAL_DESC_GATE 拦下时:改文本,不是重试】报「此镜标为状态改变,但没有任何地方说明结束时是什么样子」的镜,'  +
   '用 update_shot 把**结束时画面什么样**写进该镜 last_frame_prompt,再重出尾帧。' +
@@ -1413,7 +1413,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★只列**出视频时送得到**的尾帧(与 quote_videos 的 frame_delivery 同一判据):场景组内镜(group_unit)、续拍镜、' +
       '下游会把尾帧换成首帧的镜(static_shot_last_eq_first)等送不到的,不进 ready/pending、批量出尾帧不派发不计价,' +
       '单列在 not_delivered(带 reason/message)。少数送不到但保留的镜(客户显式要过独立尾帧、或运镜镜要它给下一镜当接缝锚)' +
-      '仍在 ready/pending 里,但标 tail_delivered=false——此镜尾帧不会送达视频,先跟客户说清再出。' +
+      '仍在 ready/pending 里(本工具的 shots_needing_last_frame 也算上它们),但标 tail_delivered=false——此镜尾帧不会送达视频,只在 chain_frames 当接缝锚时有用,先跟客户说清再出;' +
+      'generate_frames(first_frame) 回执里的 shots_needing_last_frame 不含这些镜(单列 last_frame_seam_anchor_only),两个数对不上就是这个原因。' +
+      '★批量 frame_type=last_frame 会把这些保留镜也一起出、一起计价——ready/pending 全是 tail_delivered=false 时,客户不要接缝锚就别出尾帧。' +
       '拿到 ready 清单后:quote_frames + generate_frames 带 frame_type=last_frame 即可批量补。' +
       '★尾帧补完(或本工具报 0)之后的下一步是接缝:chain_frames(dry_run:true) 看计划与预估、客户确认后执行,再 review_frames。' +
       FIRST_FRAME_NOT_DELIVERED_HINT + KEYFRAME_ADVISORY_HINT +
@@ -1461,7 +1463,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★**本工具默认只出首帧,出帧是两趟**:首帧出完必须调一次免费的 tail_frame_plan——它按平台自己的判据告出哪几镜需要独立尾帧' +
       '(末态≠首态:大运镜/物体脱手/状态改变,占比约三成,你自己猜不出来),再用 frame_type=last_frame 批量补。' +
       '生产实测 32 集里 30 集整集只出了首帧、其中 23 集一路出完视频:那些镜出视频时只有首帧一个锚,末态由模型自由发挥。' +
-      '本工具响应体里的 shots_needing_last_frame 就是这个数,不为 0 就别直接去 review_frames。' +
+      '本工具响应体里的 shots_needing_last_frame 只数**出视频时送得到**的尾帧,不为 0 就别直接去 review_frames;' +
+      '为 0 而带 last_frame_seam_anchor_only=N 时,那 N 镜尾帧送不进视频(如细微运动镜只送首帧),只在 chain_frames 当接缝锚时有用,不需要就别花钱出。' +
       '★响应里的 frames_planned 是**计划数,不是已成功数**——本接口在后台派发循环开跑之前就返回了。' +
       '真实进度只看 get_storyboards 的 first_frame_image / get_jobs 的逐条生成记录;' +
       '余额不足(402)会中止整批,此时轮询再久也不会有结果,应去查余额而不是继续等。' +

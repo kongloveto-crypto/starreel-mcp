@@ -489,7 +489,11 @@ content that will be rejected.
    own invention. `generate_frames`'s own response carries
    `shots_needing_last_frame` for the same reason: if it is not 0, fill those tail
    frames in (`generate_frames` with `frame_type=last_frame`, or
-   `generate_shot_frame` for a single shot) before `review_frames`. `generate_videos` needs at
+   `generate_shot_frame` for a single shot) before `review_frames`. That count only
+   includes tail frames that actually reach the video model; shots listed under
+   `last_frame_seam_anchor_only` (and marked `tail_delivered=false` in `tail_frame_plan`)
+   never send their tail frame to video — they only help `chain_frames` as a seam anchor,
+   so skip them unless that anchor is wanted. `generate_videos` needs at
    least one first frame in the episode.
    **If a tail frame is refused with `TERMINAL_DESC_GATE`** ("this shot is marked as a
    state change, but nothing says what it ends up looking like"), the fix is text, not a
