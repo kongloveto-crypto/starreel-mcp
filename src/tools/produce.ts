@@ -1057,6 +1057,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'get_storyboards',
     '读某一集的分镜列表(供审阅/查进度)。含每镜首帧(first_frame_image)与视频(video_url)是否就绪。' +
+      '★**video_url 不一定是成片里用的那一版**:做过旁白换轨(revoice_narration)、声线统一、对白替换的镜,成片用的是换轨产物,' +
+      '看 effective_video_url(effective_video_source=dialogue_replaced 即换轨产物,raw=就是 video_url);预览、自查声音、本地剪辑一律用 effective_video_url。' +
+      '★video_quality_issues 含 narration_overflow = 旁白比视频长、句尾被截掉(overflow_s 秒),处置看 hint。' +
       'asset_versions 按首帧/尾帧/视频分别给出 generated(已生成)、input_consistent(与当前输入一致)、review_valid(审核有效)、adopted(已采用)、current_effective(当前有效)。null=缺少证据；ready 只表示存在产物，不代表当前有效。旧素材仍可查看。' +
       '★每镜带**台词与说话人**:dialogue(原文,无台词为 null)、dialogue_lines([{speaker,text}] 逐行,' +
       '与字幕/配音同一个解析器拆的——这里的 speaker 就是成片里被配音的那个;舞台提示已剥),' +
@@ -3145,7 +3148,13 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       + ' regenerate_shot_video(厂商每次说多少是随机的,重掷常能拿到整句);同一剧反复 off_script 则换引擎。'
       + '★never_audited 是本报告最重要的一栏:那些镜从没被检测过,「没测过」不等于「没问题」。'
       + 'rescan=true 会对它们补跑 ASR 比对(耗算力、非瞬时,limit 控制单次上限),默认不跑。'
-      + 'TTS 配音镜不在范围内(TTS 必然念全,低覆盖率只会是转写误差)。'
+      + '★**按成片里实际播的那一段判**:每镜带 timeline_window_s(成片播源片哪一段,秒)与 speech_span_s(话从哪说到哪);'
+      + '原片念全了、但入出点 / MV 锁时长把话切掉的镜也报 truncated,带 window_truncated=true 与 suggestions'
+      + '(extend_out=用 trim_shot 把出点挪到 out_ms / move_in=提前入点 / extend_duration=镜长加到 durationSec / regenerate_or_split=源片本身不够长,按 needSec 重出或拆镜)——'
+      + '这类**不用重出**,按建议调就行。说话区间要 rescan 时才测得到(裁剪过的镜会自动纳入补测)。'
+      + '★minor_gap 里缺的若是**句尾一整段**(不是零星听岔),判 truncated,不再当转写误差。'
+      + '★narration_overflow:旁白比视频长、句尾被截掉的镜(出视频时量出来的,不靠转写);处置看每条 hint。'
+      + 'TTS 配音镜不在台词覆盖率范围内(TTS 必然念全,低覆盖率只会是转写误差),但旁白超片长照样列在 narration_overflow。'
       + '同一集若还伴随「切太快」,那是另一回事,跑 scan_intra_shot_cuts。',
     {
       episode_id: z.number().int().positive(),
@@ -3165,6 +3174,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'update_shot',
     '逐镜编辑:改单个分镜的文本内容(景别/动作/台词/画面描述/运镜等)、面部表情(expression_hint)、时长(duration)、成片变速(speed_factor)、镜间转场(transition_type / transition_duration_ms)、角色绑定(character_ids)、道具绑定(prop_ids)、画外音标记(character_presence)与服装绑定(active_wardrobe_id / appearance_wardrobes)。只传要改的字段、其余不动。★改镜(成功或被拒)都会作废覆盖本镜的未消费报价,生成时回 409 QUOTE_INVALIDATED——先改成功、回读核对,再报价。' +
+      '★台词装不下时平台按语速律自动抬时长;**已出视频的镜不会被抬过视频真长**(否则成片结尾定格),超出部分在返回的说明里提示按需要的时长 regenerate_shot_video 或 split_shot。显式传的 duration 照给。' +
       '**免费**(纯文本写库)。★改 dialogue 会自动失效本镜已生成的 TTS 配音与字幕(需重出 tts);' +
       '改文本不会自动重出图/视频,如需让画面跟上文本改动,改完再 regen 对应镜。用 get_storyboards 查改后结果(每镜带 character_ids / character_bindings / scene_id / prop_ids / active_wardrobe_id / appearance_wardrobes);景别/机位/运镜/剪辑意图与提示词正文用 get_shot_prompts 逐镜回读。' +
       '★★【换衣服改这里,不是改文字】出图穿什么由**服装绑定**决定:单人镜用 active_wardrobe_id(整镜一件),' +
@@ -3346,7 +3356,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★纯旁白镜(本镜只有旁白)直接可用;**混合镜**(既有出镜台词又有旁白)要求分句数与视频里的语音段数一致,' +
       '对不上就报错不猜(猜错会把出镜台词一起静掉)——这时只能 regenerate_shot_video。' +
       '★台词栏没有旁白行会直接报错;厂商在无台词镜里乱念,用 replace_shot_dialogue 的 mute_only。' +
-      '★写回后成片会直接用它(不需要额外开关),rerender_episode 重拼即可;复核不通过不写回,旁白合成费不退。',
+      '★放置:新旁白按自然语速放进可用空间(纯旁白镜到片尾、混合镜到下一段出镜台词前),放得下就原速,放不下才整体加速;' +
+      '纯旁白单说话人整段一起换、只调一次速,不再逐句贴旧声音的时长(那样同一句会一快一慢)。返回的 segments[].atempo 就是实际变速。' +
+      '★写回后成片会直接用它(不需要额外开关),rerender_episode 重拼即可;复核不通过不写回,旁白合成费不退。' +
+      '★换完后 get_storyboards 的 **effective_video_url** 是成片实际用的这版;video_url 仍是原片(旧声音),预览/自查别拿 video_url 听。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) =>
       jsonResult(await client.producePost(`/storyboards/${storyboard_id}/dialogue-replace`, { mode: 'narration' })),

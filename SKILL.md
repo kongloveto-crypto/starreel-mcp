@@ -1260,6 +1260,17 @@ word-level comparison of what the clip's audio says against the shot's line.
 Note `never_audited` in the report — those shots have never been measured, which
 is not the same as passing; `rescan: true` measures them (costs ASR time).
 
+The report judges **what the final cut actually plays**, not just the source clip:
+each shot carries `timeline_window_s` and `speech_span_s`, and a shot whose source
+says the full line but whose in/out points (or MV-locked duration) cut it off is
+reported as `truncated` with `window_truncated: true` and `suggestions` (move the
+out point with `trim_shot`, move the in point, lengthen the shot, or — when the
+source itself ends mid-line — regenerate at the suggested length / split). Those
+need no regeneration. `narration_overflow` lists shots whose narration was longer
+than the video so its tail got cut. When you preview or self-check audio, use
+`effective_video_url` from `get_storyboards` — after `revoice_narration` (or voice
+unification / dialogue replacement) `video_url` still holds the old audio.
+
 **Two ways to fix, and the cheap one is not the obvious one.**
 `repair_episode_dialogue` re-voices the line with the character's cloned voice
 and mutes the original audio — **without regenerating the video**. It bills at
