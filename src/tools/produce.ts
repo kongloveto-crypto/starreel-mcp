@@ -585,7 +585,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
         .optional()
         .describe(
           '世界观 Brief:一段话锁定语言/文化/时代/地点,作为 AI 强制约束(ERA LOCK),' +
-            '影响剧本改写·分镜·所有出图。不设则按剧本语言与文化自动推断。',
+            '影响剧本改写·分镜·所有出图。不设则按剧本语言与文化自动推断。' +
+            '★别把具体的生物、天体、物件写进来:这里的文字会被注入**每一张**空景基板(场景图、场景变体图),' +
+            '包括回忆场景与不同时段的场景——写进一个具体元素,所有场景基板都会画出它。只写世界观层面的约束' +
+            '(时代、地域、文化、技术水平、整体基调),具体元素写进出现它的那几镜的分镜。',
         ),
       ethnicity: z.enum(ETHNICITY_CODES).optional()
         .describe('全剧角色族裔锁(单一真相源)。不设=按剧本自动推断;custom 时用 ethnicity_note 写自由描述'),
@@ -2007,7 +2010,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'link_world_state_scene_variant',
     '把账本里的某条事件关联到一个**场景变体**(免费)。'
-      + '用途：同一场景在事件前后长得不一样(灯亮/灯灭、完好/破损),关联之后出图会取对应那版场景图。',
+      + '用途：同一场景在事件前后长得不一样(灯亮/灯灭、完好/破损),关联之后出图会取对应那版场景图。'
+      + '\n★variant_id 从 get_scene_variants 拿;被关联的变体必须已经有图(has_image=true),'
+      + '没图先 quote_scene_variant_image → generate_scene_variant_image 出一张,否则本工具回 400。',
     {
       episode_id: z.number().int().positive(),
       event_id: z.number().int().positive(),
@@ -2260,7 +2265,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       // 确认要改必须显式带 true。通常正解是建剧时定好画幅、之后不改。
       confirm_aspect_change: z.boolean().optional(),
       video_resolution: z.enum(VIDEO_RESOLUTIONS).optional(),
-      setting_brief: z.string().optional().describe('世界观 Brief(ERA LOCK)'),
+      setting_brief: z.string().optional().describe('世界观 Brief(ERA LOCK)。' +
+        '★别把具体的生物、天体、物件写进来:这里的文字会被注入**每一张**空景基板(场景图、场景变体图),' +
+        '包括回忆场景与不同时段的场景——写进一个具体元素,所有场景基板都会画出它。只写世界观层面的约束' +
+        '(时代、地域、文化、技术水平、整体基调),具体元素写进出现它的那几镜的分镜。'),
       ethnicity: z.enum(ETHNICITY_CODES).optional().describe('角色族裔锁'),
       ethnicity_note: z.string().optional(),
       rewrite_mode: z.enum(['standard', 'director']).optional(),
@@ -3881,7 +3889,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'get_scenes',
-    '读某一集的场景列表。免费。每条带 id、location(地点名)、time(时段)、has_image(场景图是否就绪)、status。' +
+    '读某一集的场景列表。免费。每条带 id、location(地点名)、time(时段)、has_image(场景图是否就绪)、status,' +
+      '以及 variant_count(本场景的变体数)/ variants_with_image(其中已出图的数)——变体明细与要不要出见 get_scene_variants。' +
       '★分镜表导入(import_storyboard_table / bulk_import_storyboards)按场景头的地点与时段**逐字**绑定场景——写表前从这里抄 location / time,不用逐个调 get_scene_prompt。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/scenes`)),
@@ -4233,7 +4242,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       era: z.string().nullable()
         .describe('modern / republican / historical / fantasy / surreal(也收中文「现代 / 民国 / 古代 / 仙侠 / 超现实」)。传 null 清空本集契约'),
       positive: z.array(z.string()).optional()
-        .describe('额外的正向约束(可留空,平台自带该档基线)。写世界观独有的东西,别重复该档已有的常识'),
+        .describe('额外的正向约束(可留空,平台自带该档基线)。写世界观独有的东西,别重复该档已有的常识。' +
+          '★只写世界观层面的约束(整体设定、规则、风貌),别写具体的生物、天体、物件:positive 会被注入本集**每一张**空景基板,' +
+          '写进一个具体元素,连回忆场景、不同时段的场景基板都会画出它;具体元素写进出现它的那几镜的分镜'),
       negative: z.array(z.string()).optional()
         .describe('额外的禁止项(可留空)。写该档基线没覆盖、但本项目必须禁的东西'),
     },
@@ -4385,6 +4396,43 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
         `/scenes/${scene_id}/image/regenerate`,
         { ...(quote_id ? { quote_id } : {}), ...(episode_id ? { episode_id } : {}) },
       )),
+  )
+  server.tool(
+    'get_scene_variants',
+    '列出某个场景的**场景变体**(免费)。变体是同一地点的另一版样子:时段/光位(如 lighting_*)、天气、破坏状态(如起火、损毁)、机位角度。' +
+      '网页端提取资产时会自动建这些变体,客户在「场景」页会看到成排「未生成」的卡片——被问「这些要不要出」时先调本工具。' +
+      '每条带 id、kind、kind_label、name、has_image、status(ready / generating / failed / not_generated)、' +
+      'generation_id / generation_status(最近一次出图)。★判出图完没完看 status,别看 has_image:重出已有图的变体时旧图在新图落定前一直在,has_image 一直是 true。' +
+      '\n★出图时只有**已经有图**的变体才会被自动匹配;没图的变体不起作用、不影响任何画面,可以不出。' +
+      '\n★时段/光位变体出了图之后,同一场的不同镜头可能各自拿到不同光线的背景——镜头一致性优先时别为它们批量出图;' +
+      '只在剧情真需要同一地点两种样子(如事件前后完好 / 损毁)时出对应那一个。' +
+      '\n★这里的 id 就是 link_world_state_scene_variant 要的 variant_id(关联前该变体要先有图)。',
+    { scene_id: z.number().int().positive() },
+    async ({ scene_id }) => jsonResult(await client.produceGet(`/scenes/${scene_id}/variants`)),
+  )
+  server.tool(
+    'quote_scene_variant_image',
+    '给一个场景变体出图的报价(免费,不出图)。返回 estimated_points(上界)/ typical_points(通常花费)与 quote_id,' +
+      'already_has_image=true 表示该变体已有图、生成会覆盖。拿到 quote_id 后传给 generate_scene_variant_image。' +
+      '\n★先想清楚要不要出:出图时只有已有图的变体才会被自动匹配,没图的不起作用;' +
+      '时段/光位变体会让同一场不同镜头拿到不同背景,镜头一致性优先时别乱出。' + CONFIRM_HINT,
+    { variant_id: z.number().int().positive().describe('来自 get_scene_variants 的 id') },
+    async ({ variant_id }) => jsonResult(await client.producePost(`/scene-variants/${variant_id}/image/quote`)),
+  )
+  server.tool(
+    'generate_scene_variant_image',
+    '给一个场景变体出一张图(以本场景的基础场景图为视觉锚,保证是同一地点)。图片步,按用量后付不欠费。' +
+      '★必须先调 quote_scene_variant_image,把点数告诉客户,客户同意后带 quote_id 调本工具;报价确认后剧的图片模型或布景变了会回 409 quote_stale,重新报价即可。' +
+      '\n★出图后该变体才会在出图时被自动匹配;已有图的变体再出会覆盖旧图。' +
+      '时段/光位变体会让同一场的不同镜头拿到不同光线的背景,镜头一致性优先时别乱出。' +
+      '\n异步:立即返回,轮询 get_scene_variants 看该变体的 status:generating=还在出,ready=已落定,failed=这次失败(重出失败时旧图仍在、status 仍是 ready,要核对 generation_id 是不是本次回执里那个);' +
+      '别只看 has_image——重出时旧图一直在。' + ASSET_QC_HINT,
+    {
+      variant_id: z.number().int().positive().describe('来自 get_scene_variants 的 id'),
+      quote_id: z.string().describe('来自 quote_scene_variant_image(必带)'),
+    },
+    async ({ variant_id, quote_id }) =>
+      jsonResult(await client.producePost(`/scene-variants/${variant_id}/image/generate`, { quote_id })),
   )
   server.tool(
     'delete_scene',

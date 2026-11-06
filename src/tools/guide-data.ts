@@ -267,9 +267,10 @@ export const PIPELINE: PipelineStep[] = [
   },
   {
     step: '4 提取资产(角色/场景/道具)',
-    tools: ['extract_assets', 'get_characters', 'get_scenes', 'get_props', 'update_character', 'update_scene', 'update_prop', 'create_prop', 'mark_signature_prop'],
+    tools: ['extract_assets', 'get_characters', 'get_scenes', 'get_scene_variants', 'get_props', 'update_character', 'update_scene', 'update_prop', 'create_prop', 'mark_signature_prop'],
     billing: '文本按 token 后付',
-    note: '角色外观唯一真相源 = 人物档案(`update_character` 改;客户确认后 profile_locked=1 锁定);别把角色外观写进 visual_lock/art_bible。',
+    note: '角色外观唯一真相源 = 人物档案(`update_character` 改;客户确认后 profile_locked=1 锁定);别把角色外观写进 visual_lock/art_bible。' +
+      '提取会自动建场景变体(光位/天气/破坏状态):出图只匹配已有图的变体,没图的不起作用、可以不出;光位变体会让同场不同镜背景不一,一致性优先时别批量出(`get_scene_variants` 看明细)。',
   },
   {
     step: '5 拆镜(纯文本,先于任何出图)',

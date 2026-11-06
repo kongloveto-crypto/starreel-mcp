@@ -1582,8 +1582,18 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   are tracked, and where two shots disagree), `rebuild_world_state` (LLM,
   **billed** — rerun it when `stale=true`), `add/delete_world_state_event`
   (explain away a conflict the AI mis-read instead of editing shots),
-  `link_world_state_scene_variant`, `derive_pose_chain` (LLM, **billed** — fills
-  only the shots whose poses are blank, so cuts connect).
+  `link_world_state_scene_variant` (its `variant_id` comes from
+  `get_scene_variants`; the variant must already have an image), `derive_pose_chain`
+  (LLM, **billed** — fills only the shots whose poses are blank, so cuts connect).
+- **Scene variants**: the web app auto-creates variants per scene (time-of-day /
+  lighting `lighting_*`, weather, destruction such as fire / destroyed); the
+  customer sees them as "not generated" cards. `get_scenes` reports
+  `variant_count` / `variants_with_image`; `get_scene_variants` lists them.
+  Only variants that **already have an image** are matched at image generation —
+  ungenerated ones have no effect and can be left alone. Lighting variants give
+  different shots of one scene different backgrounds, so when shot consistency
+  comes first don't batch them. To generate one: `quote_scene_variant_image` →
+  tell the customer → `generate_scene_variant_image` (quote_id required).
 - **Intermediate keyframes inside one shot (enabled per project; currently on for all)**: `plan_shot_keyframes`
   (LLM, **billed**; `dry_run:true` to preview) adds 1–3 "at second t the frame
   shows …" targets between a shot's first and last frame — wind-up, contact,
@@ -1820,7 +1830,7 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   then quote and retry. A success carrying `reused_in_flight: true` means the same
   input was already generating — follow that generation, don't send it again.
 - **Read back (all free)**: `list_dramas`, `get_drama`, `get_characters`,
-  `get_scenes`, `get_assets`, `get_jobs`, `get_pipeline_status`,
+  `get_scenes`, `get_scene_variants`, `get_assets`, `get_jobs`, `get_pipeline_status`,
   `get_autofill_status` (progress of the background completion batch started by an
   import's `auto_complete` or by `autofill_storyboards`, plus a counts-only receipt:
   `skipped_no_gap`, `fields_written_counts`, `contract_coverage` — completion writes

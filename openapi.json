@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.309",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.309 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.310",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.310 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -70,6 +70,10 @@
     {
       "name": "props",
       "description": "Operations under /props"
+    },
+    {
+      "name": "scene-variants",
+      "description": "Operations under /scene-variants"
     },
     {
       "name": "scenes",
@@ -10861,7 +10865,7 @@
       "get": {
         "operationId": "get_scenes",
         "summary": "读某一集的场景列表",
-        "description": "读某一集的场景列表。免费。每条带 id、location(地点名)、time(时段)、has_image(场景图是否就绪)、status。★分镜表导入(import_storyboard_table / bulk_import_storyboards)按场景头的地点与时段**逐字**绑定场景——写表前从这里抄 location / time,不用逐个调 get_scene_prompt。",
+        "description": "读某一集的场景列表。免费。每条带 id、location(地点名)、time(时段)、has_image(场景图是否就绪)、status,以及 variant_count(本场景的变体数)/ variants_with_image(其中已出图的数)——变体明细与要不要出见 get_scene_variants。★分镜表导入(import_storyboard_table / bulk_import_storyboards)按场景头的地点与时段**逐字**绑定场景——写表前从这里抄 location / time,不用逐个调 get_scene_prompt。",
         "tags": [
           "episodes"
         ],
@@ -13202,7 +13206,7 @@
       "put": {
         "operationId": "link_world_state_scene_variant",
         "summary": "把账本里的某条事件关联到一个**场景变体**(免费)",
-        "description": "把账本里的某条事件关联到一个**场景变体**(免费)。用途：同一场景在事件前后长得不一样(灯亮/灯灭、完好/破损),关联之后出图会取对应那版场景图。",
+        "description": "把账本里的某条事件关联到一个**场景变体**(免费)。用途：同一场景在事件前后长得不一样(灯亮/灯灭、完好/破损),关联之后出图会取对应那版场景图。\n★variant_id 从 get_scene_variants 拿;被关联的变体必须已经有图(has_image=true),没图先 quote_scene_variant_image → generate_scene_variant_image 出一张,否则本工具回 400。",
         "tags": [
           "episodes"
         ],
@@ -14201,6 +14205,121 @@
         }
       }
     },
+    "/scene-variants/{variant_id}/image/generate": {
+      "post": {
+        "operationId": "generate_scene_variant_image",
+        "summary": "给一个场景变体出一张图(以本场景的基础场景图为视觉锚,保证是同一地点)",
+        "description": "给一个场景变体出一张图(以本场景的基础场景图为视觉锚,保证是同一地点)。图片步,按用量后付不欠费。★必须先调 quote_scene_variant_image,把点数告诉客户,客户同意后带 quote_id 调本工具;报价确认后剧的图片模型或布景变了会回 409 quote_stale,重新报价即可。\n★出图后该变体才会在出图时被自动匹配;已有图的变体再出会覆盖旧图。时段/光位变体会让同一场的不同镜头拿到不同光线的背景,镜头一致性优先时别乱出。\n异步:立即返回,轮询 get_scene_variants 看该变体的 status:generating=还在出,ready=已落定,failed=这次失败(重出失败时旧图仍在、status 仍是 ready,要核对 generation_id 是不是本次回执里那个);别只看 has_image——重出时旧图一直在。\n★【完成后质检·免费】出完等图落库(轮询对应 get_* 看状态,pending 别重复调),再调 review_assets 审资产层(缺图 / 生成中 / 失败 / 被一致性闸拒收 / 道具时代冲突 / 色彩脚本),findings 原样告诉客户、按 action 修完复审;再按它返回的 agent_qc 亲自逐张看图(像不像档案、是不是同一个人、时代对不对;设定图本身各角度齐不齐、比例与结构对不对;道具与场景图放在剧情里合不合理——对照素材 used_in_shots 那几镜),submit_qc_report 提交质检报告;出镜头图时把它的 review_token 作为 asset_review_token 传给 generate_frames / generate_shot_frame。",
+        "tags": [
+          "scene-variants"
+        ],
+        "parameters": [
+          {
+            "name": "variant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "来自 get_scene_variants 的 id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "quote_id": {
+                    "type": "string",
+                    "description": "来自 quote_scene_variant_image(必带)"
+                  }
+                },
+                "required": [
+                  "quote_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/scene-variants/{variant_id}/image/quote": {
+      "post": {
+        "operationId": "quote_scene_variant_image",
+        "summary": "给一个场景变体出图的报价(免费,不出图)",
+        "description": "给一个场景变体出图的报价(免费,不出图)。返回 estimated_points(上界)/ typical_points(通常花费)与 quote_id,already_has_image=true 表示该变体已有图、生成会覆盖。拿到 quote_id 后传给 generate_scene_variant_image。\n★先想清楚要不要出:出图时只有已有图的变体才会被自动匹配,没图的不起作用;时段/光位变体会让同一场不同镜头拿到不同背景,镜头一致性优先时别乱出。⚠️ 批量报价确认流程:先调对应的 quote_* 工具拿 estimated_points 与 quote_id,再用 quote_id 调本工具(报价确认按执行模式:专业模式 / 未确认方案 / 本环节由客户把控 → 讲给客户、客户同意才做,别替客户决定;本环节托管 → 不问客户,照 get_production_plan 的 autopilot.default_decisions 执行,平台记进 get_autopilot_log)。托管环节报价须在预算硬上限内,被 402 BUDGET_WOULD_EXCEED 拦下就停下问客户。★**出图类报价(定妆图/场景图/出帧)给的是两个数**:estimated_points 是**上界**(按该模型参考图张数上限估,保证你不会按低了的预算开跑、出到一半 402 中断);同一响应里的 typical_points 是**通常花费**。两个都要告诉客户——只说上界会让人以为贵得多(满参考图的上界可达通常值的 2 倍以上),只说通常值又会让余额准备不足。固定价模型下两者相等,这时说一个数就行。出视频的报价与扣费同函数,不存在这个区间。",
+        "tags": [
+          "scene-variants"
+        ],
+        "parameters": [
+          {
+            "name": "variant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "来自 get_scene_variants 的 id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
     "/scenes/{scene_id}": {
       "put": {
         "operationId": "update_scene",
@@ -14584,6 +14703,53 @@
         "operationId": "get_scene_prompt",
         "summary": "读某一场**场景图(空景基板)**的提示词正文,供直接微调后用 update_scene 的 image_prompt 写回",
         "description": "读某一场**场景图(空景基板)**的提示词正文,供直接微调后用 update_scene 的 image_prompt 写回。免费。★逐场按需:改哪场读哪场(整集列表 get_scenes 是纯资产视图,不含提示词)。★这是场景表里的正文层;出图时平台还会在其上拼画风块、空景约束与时代锁(不在此处,也无需你写)。回执的 has_image 说明这一场是否已有图。",
+        "tags": [
+          "scenes"
+        ],
+        "parameters": [
+          {
+            "name": "scene_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/scenes/{scene_id}/variants": {
+      "get": {
+        "operationId": "get_scene_variants",
+        "summary": "列出某个场景的**场景变体**(免费)",
+        "description": "列出某个场景的**场景变体**(免费)。变体是同一地点的另一版样子:时段/光位(如 lighting_*)、天气、破坏状态(如起火、损毁)、机位角度。网页端提取资产时会自动建这些变体,客户在「场景」页会看到成排「未生成」的卡片——被问「这些要不要出」时先调本工具。每条带 id、kind、kind_label、name、has_image、status(ready / generating / failed / not_generated)、generation_id / generation_status(最近一次出图)。★判出图完没完看 status,别看 has_image:重出已有图的变体时旧图在新图落定前一直在,has_image 一直是 true。\n★出图时只有**已经有图**的变体才会被自动匹配;没图的变体不起作用、不影响任何画面,可以不出。\n★时段/光位变体出了图之后,同一场的不同镜头可能各自拿到不同光线的背景——镜头一致性优先时别为它们批量出图;只在剧情真需要同一地点两种样子(如事件前后完好 / 损毁)时出对应那一个。\n★这里的 id 就是 link_world_state_scene_variant 要的 variant_id(关联前该变体要先有图)。",
         "tags": [
           "scenes"
         ],
