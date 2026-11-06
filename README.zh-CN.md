@@ -103,8 +103,9 @@ env = { "STARREEL_API_KEY" = "srk_live_xxx" }
 | ② 等待并试听 | `get_voice_design`(`design_id`)— 约 1~3 分钟;`done` 后每条候选下载为本地 wav(`local_path`),**交给客户试听挑选** | 免费 |
 | ③ 定样 | `save_designed_voice`(`design_id`、`index`、`name`)→ 返回 `voice_id`(形如 `lib:12`) | 与声音克隆同价;同一条重复保存不重复扣 |
 | ④ 用起来 | `set_character_voice`(`character_id`、`voice_id`)→ 之后 `generate_tts` 就用它念这个角色的全部台词 | 免费 |
+| ④b 或设为本剧旁白 | `set_narrator_voice`(`drama_id`、`voice_id`)→ 设为本剧旁白(角色表里没有旁白时自动补建);`get_narrator_voice` 查旁白现在用的声音与来源 | 免费 |
 
-旁白也是一个角色(`char_type` 为 voiceover),按角色绑定即可。
+旁白也是一个角色(`char_type` 为 voiceover),用 `set_narrator_voice` 按剧设置即可。
 
 **描述怎么写**:写「要什么」,别写「不要什么」——模型对否定句不敏感。
 按 年龄 / 性别 / 音色 / 语速 / 情绪 几个维度各写一点即可,例如:

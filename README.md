@@ -160,6 +160,7 @@ recording to clone, design one from a single sentence.
 | 2. Wait and listen | `get_voice_design` (`design_id`) — about 1-3 minutes; when `done`, every candidate is downloaded as a local wav (`local_path`) for the customer to pick | free |
 | 3. Keep one | `save_designed_voice` (`design_id`, `index`, `name`) → `voice_id` (e.g. `lib:12`) | same as a voice clone; saving the same candidate twice charges once |
 | 4. Use it | `set_character_voice` (`character_id`, `voice_id`) — `generate_tts` then reads every line of that character with it | free |
+| 4b. Or make it the narrator | `set_narrator_voice` (`drama_id`, `voice_id`) — sets the drama's narrator (creates the narrator character if the cast has none); `get_narrator_voice` shows what the narrator uses now and where it comes from | free |
 
 The narrator is a character too (`char_type` voiceover). Describe what you want rather than what
 you don't — age, gender, timbre, pace, mood — e.g. *"a middle-aged man, low and warm voice, slow pace,

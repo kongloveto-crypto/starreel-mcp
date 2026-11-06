@@ -276,7 +276,7 @@ export const WORKFLOW_HINT =
   '误重跑用 get_script(include_previous=1) 回捞上一版。' +
   'generate_portraits_and_sheets(定妆图+设定图·分镜后建:先用 delete_character 删掉**全剧任何一集都不出场、后续集也不打算用**的出镜角色再出图——角色是剧级的,删了每一集的出帧装配都不再带它,只看本集分镜判不出来、拿不准就留着(一张定妆图的钱远小于后面某集丢身份锚);定妆图步对**所有未删的出镜角色**出图、不看分镜绑定,留着的都照常扣费;' +
   '画外音角色(char_type=voiceover 的旁白/电话音)本就不出图、也没有分镜绑定,**别删**,配音还靠它)→' +
-  '★generate_color_script(色彩脚本·统一调色)→assign_voices(分配音色;旁白/角色库里没合适的→design_voice 按描述造一个,定样后 set_character_voice)→' +
+  '★generate_color_script(色彩脚本·统一调色)→assign_voices(分配音色;角色库里没合适的→design_voice 按描述造一个,定样后 set_character_voice;旁白先 get_narrator_voice 看来源,不是客户配的就问要不要 design_voice→set_narrator_voice 给本剧一个专属旁白声)→' +
   '★quote_scene_images+generate_scene_images(空景基板·出帧前必做)→frames(默认只出首帧)→★tail_frame_plan(免费·哪几镜要独立尾帧)→frames(frame_type=last_frame)→★chain_frames(接缝·先 dry_run:true)→★review_frames→videos→generate_tts→compose;' +
   '★★【接缝别跳·尾帧补完、review_frames 之前】首尾帧齐了之后调 chain_frames(dry_run:true,免费)看平台的接缝计划与 estimated_points' +
   '(copy 免费、reframe 每道一张图),讲给客户、确认后不带 dry_run 执行;已接好的缝不进计划,重复调不重复扣费。' +
@@ -3340,7 +3340,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     'revoice_narration',
     '换某镜**旁白/画外音**的声音(或改过旁白文字后重配)。**不重新生成视频**:保留画面与出镜台词,只把旁白那几段静掉、' +
       '按当前旁白声音重新合成并混回,再复核。同步调用,按 TTS 档(千字符)计费。' +
-      '★先改好再调:想换声音先 set_character_voice 给「旁白」角色(没有就 design_voice 造一个),想改文字先 update_shot 改 dialogue 里的旁白行。' +
+      '★先改好再调:想换声音先 set_narrator_voice 设本剧旁白(没有合适的声音就 design_voice 造一个),想改文字先 update_shot 改 dialogue 里的旁白行。' +
       '★纯旁白镜(本镜只有旁白)直接可用;**混合镜**(既有出镜台词又有旁白)要求分句数与视频里的语音段数一致,' +
       '对不上就报错不猜(猜错会把出镜台词一起静掉)——这时只能 regenerate_shot_video。' +
       '★台词栏没有旁白行会直接报错;厂商在无台词镜里乱念,用 replace_shot_dialogue 的 mute_only。' +
@@ -5040,7 +5040,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   server.tool(
     'save_designed_voice',
     '把客户挑中的那条候选存进音色库,返回 voice_id(形如 lib:12)。**按声音克隆同价扣费**(同一条重复保存不重复扣)。' +
-      '之后用 set_character_voice 绑到角色(旁白也是一个角色)才会用它配音;也可以先 speak_with_voice 试听更多句子。',
+      '之后用 set_character_voice 绑到角色、或 set_narrator_voice 设为本剧旁白,才会用它配音;也可以先 speak_with_voice 试听更多句子。',
     {
       design_id: z.string(),
       index: z.number().int().min(0).describe('get_voice_design 候选里的 index'),
@@ -5048,6 +5048,30 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     },
     async ({ design_id, index, name }) =>
       jsonResult(await client.producePost(`/voice-designs/${encodeURIComponent(design_id)}/save`, { index, name })),
+  )
+  // ========== 剧级旁白音色 ==========
+  server.tool(
+    'get_narrator_voice',
+    '查本剧旁白现在用的是什么声音、来自哪里。免费。' +
+      '\nsource:explicit=客户为本剧配的旁白音色;sole_protagonist=剧里只有一个出镜角色,旁白借用其音色;' +
+      'derived=平台按剧自动挑的旁白音色;fixed=平台统一兜底旁白声(所有没配旁白的剧都是这个声音)。' +
+      '\n★不是 explicit 时,建剧/配音阶段主动问客户要不要给本剧旁白设计一个专属声音(design_voice → save_designed_voice → set_narrator_voice)。',
+    { drama_id: z.number().int().positive() },
+    async ({ drama_id }) => jsonResult(await client.produceGet(`/dramas/${drama_id}/narrator-voice`)),
+  )
+  server.tool(
+    'set_narrator_voice',
+    '把音色库里的一个声音设为**本剧旁白**。免费。' +
+      '角色表里没有「旁白」时自动补建(旁白也是一个角色);旁白、画外音这类旁白角色全部绑同一个声音。' +
+      '\n典型流程:design_voice(按描述造)/ clone_voice(客户自己的录音)→ get_voice_design 试听 → save_designed_voice 存库 → set_narrator_voice。' +
+      '\n★之前按旧声音合成的旁白配音会作废,下次配音 / 出视频叠旁白时用新声音;已出好的原声视频要换旁白用 revoice_narration。' +
+      '\n★只用客户有权使用的声音(自己的录音、设计的声音、公共音色);别拿真人/名人的声音样本冒充。',
+    {
+      drama_id: z.number().int().positive(),
+      voice_id: z.string().describe('音色库 voice_id(形如 lib:12;来自 save_designed_voice / clone_voice / list_voices)'),
+    },
+    async ({ drama_id, voice_id }) =>
+      jsonResult(await client.producePost(`/dramas/${drama_id}/narrator-voice`, { library_id: voice_id })),
   )
   server.tool(
     'set_character_voice',

@@ -102,7 +102,7 @@ announces a condensed version as MCP `instructions` at connect time.
 | A scene plate that came out wrong (backdrop, era, light, layout) | `get_scene_prompt` → `update_scene` (`image_prompt`) → `quote_regenerate_scene_image` (tell the customer the points — it includes the lighting reference the platform auto-derives after a plate change when no wide-shot frame exists) → `regenerate_scene_image` with that `quote_id` (after `upload_scene_image` the platform does **not** auto-create the lighting reference — if the reply says `lighting_ref.needed`, quote it with `quote_scene_lighting_ref` and, once the customer agrees, `generate_scene_lighting_ref`); already-rendered shot frames still anchor on the old plate, so regenerate those shots too | re-running `generate_scene_images` (it only fills scenes that have **no** plate — it will not touch this one) |
 | A voice sample / a required voice | `clone_voice` → `speak_with_voice` → `set_character_voice` / `assign_voices` | cloning without the rights-holder's consent |
 | No sample, but a character already speaks in a rendered shot | `set_voice_anchor_from_shot` (free; native-audio dramas: locks the voice for later videos) → regenerate `stale_shots` | picking the voice after the whole episode is rendered |
-| **No sample** — just an idea of the voice (a narrator, a character that deserves its own voice) | `design_voice` (one-sentence description, free) → `get_voice_design` until `done` (candidates arrive as local wav files — let the customer listen) → `save_designed_voice` (pick one; billed like a clone) → `set_character_voice` | generating every line straight from the description — each generation is a different person; naming a real person to imitate their voice |
+| **No sample** — just an idea of the voice (a narrator, a character that deserves its own voice) | `design_voice` (one-sentence description, free) → `get_voice_design` until `done` (candidates arrive as local wav files — let the customer listen) → `save_designed_voice` (pick one; billed like a clone) → `set_character_voice` (or `set_narrator_voice` for the drama's narrator) | generating every line straight from the description — each generation is a different person; naming a real person to imitate their voice |
 | A song + lyrics | `create_drama` (`project_type: "mv"`) → `set_mv_lyrics` → `generate_mv_story` → `generate_mv_script` | `rewrite_script` (blocked for MV) |
 | Lyrics only, no song (MV) | `create_drama` (`project_type: "mv"`) → `set_mv_lyrics` → `suggest_mv_song_styles` → `quote_mv_song` → `generate_mv_song` → `get_mv_song` → `select_mv_song` → `generate_mv_story` → `generate_mv_script` | Confirming lyric rights on the user's behalf (`lyrics_rights_confirmed` must come from the user); picking a candidate by QC text alone without letting the user listen |
 | A product / brand | `create_drama` (`project_type: "ad"` or `"brand_film"`) → `add_product` → `generate_product_sheet` | writing brand copy as dialogue (it gets spoken) |
@@ -428,6 +428,10 @@ content that will be rejected.
    cloned for every line (0.85-0.90). The narrator is a character too — this
    is how a drama stops sounding like a broadcast announcer. Saving is billed
    like `clone_voice`; the same candidate saved twice is charged once.
+   For the narrator use `set_narrator_voice` (creates the narrator character if
+   the cast has none); `get_narrator_voice` tells you whether the drama's
+   narrator is the customer's own voice or a platform fallback — if it is a
+   fallback, ask the customer whether to design one.
 
 6. **Follow the pipeline order — do not skip.** `set_script` → `rewrite_script`
    → `extract_assets` → storyboards → portraits **+ sheets** → color script →
@@ -1287,8 +1291,8 @@ Either way, `compose_episode` afterwards — the final cut still holds the old a
 `replace_shot_dialogue`.** On clip-audio projects the narration is mixed into the
 shot's video when it is generated, so `replace_shot_dialogue` refuses
 narration-only shots ("no on-screen line to replace"). To change the narrator's
-voice, set it first (`set_character_voice` on the narrator character, or
-`design_voice`), or edit the narration line with `update_shot`, then call
+voice, set it first (`set_narrator_voice`, after `design_voice` /
+`clone_voice` if needed), or edit the narration line with `update_shot`, then call
 `revoice_narration`: it keeps the picture and on-screen lines, silences only the
 narration spans, re-synthesises them in the current voice, mixes them back and
 re-checks — no video regeneration. Shots that mix on-screen lines and narration
@@ -1687,7 +1691,7 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   `quote/generate_videos`
 - **Audio**: `generate_tts` (required before final cut), `clone_voice`,
   `design_voice` → `get_voice_design` → `save_designed_voice` (no sample needed),
-  `speak_with_voice`, `set_character_voice`, `list_voices`, `delete_voice`,
+  `speak_with_voice`, `set_character_voice`, `get_narrator_voice` / `set_narrator_voice`, `list_voices`, `delete_voice`,
   `generate_bgm` (optional `prompt` steers the music; read `get_bgm_prompt_guide` first; optional `director` hard-locks mood / instruments / bpm / tonality for the whole episode or per act (saved per episode like `prompt`: omit it to reuse the last one, pass `null` to clear) — call the free read-only `get_bgm_plan` first to see the acts; to let the client pick between full-length versions, `quote_bgm_candidates` → `generate_bgm` with `candidates` 2–3 + `quote_id` → `select_bgm_candidate`, each candidate billed per song),
   `get_bgm_prompt_guide`, `replace_shot_dialogue`, `revoice_narration`,
   `set_own_bgm` (the client's **own or licensed** music as the episode/drama score — confirm the rights with the client

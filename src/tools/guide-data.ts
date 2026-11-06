@@ -130,6 +130,7 @@ export const ENTRY_POINTS: EntryPoint[] = [
       'speak_with_voice(任意文本试听)',
       'list_voices',
       'set_character_voice(绑到角色;传 voice_id 如 lib:12)',
+      'set_narrator_voice(设为本剧旁白;没有旁白角色自动补建)/ get_narrator_voice(看旁白现在用的声音与来源)',
       'assign_voices',
     ],
     note: '所有项目默认视频原声(use_clip_audio=true,跳过 TTS);要配音把它设 false,并主动告诉客户可切换。' +
