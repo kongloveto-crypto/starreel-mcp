@@ -647,7 +647,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '读某一集的原始内容 + AI 改写后的可拍稿 + 改写状态 + dramaturgy_suggestions(两步保真模式下 AI 识别到但未自动补的剧作缺口——钩子/情感锚点;采纳与否' + MODE_DECIDES('') + ',忽略不影响产线)。免费。' +
       '★改稿工作流:先用本工具取回 rewritten_script 全文 → 只改客户要改的那几场 → 用 edit_rewritten_script 提交(不要重跑改写)。' +
       'previous_script_available=true 表示有上一版快照;传 include_previous=1 可取回上一版全文(误重跑/改坏了的回捞路径,默认不带以免响应翻倍)。' +
-      '★rewrite_additions(原稿已是剧本形态时才有,否则 null):逐行点名改写稿里**原稿没有**的声音行(added_voice_lines:旁白/台词/OS/字幕,会被配音念出来)' +
+      '★rewrite_additions(永不为 null,先看 status):checked=本集走两步保真改写(剧本形态原稿,或剧级 rewrite_pipeline=two_pass),清单是真实结果、空数组=没有新增;' +
+      'not_applicable=走创作型改写(小说/大纲原稿或 single_forced),加旁白是本职不追溯;not_rewritten=还没改写;unknown=判断不了,原因看 reason。' +
+      'checked 时逐行点名改写稿里**原稿没有**的声音行(added_voice_lines:旁白/台词/OS/字幕,会被配音念出来)' +
       '与剪辑指令(edit_directives:硬切/叠化/转场等,镜间转场归平台转场字段管)。非空就逐条处置' + MODE_DECIDES('保留还是删') + ',不要的用 edit_rewritten_script 删掉;原稿已定稿的客户通常不要这些新增。',
     {
       episode_id: z.number().int().positive(),
