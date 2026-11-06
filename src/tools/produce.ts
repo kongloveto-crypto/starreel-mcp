@@ -646,7 +646,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     'get_script',
     '读某一集的原始内容 + AI 改写后的可拍稿 + 改写状态 + dramaturgy_suggestions(两步保真模式下 AI 识别到但未自动补的剧作缺口——钩子/情感锚点;采纳与否' + MODE_DECIDES('') + ',忽略不影响产线)。免费。' +
       '★改稿工作流:先用本工具取回 rewritten_script 全文 → 只改客户要改的那几场 → 用 edit_rewritten_script 提交(不要重跑改写)。' +
-      'previous_script_available=true 表示有上一版快照;传 include_previous=1 可取回上一版全文(误重跑/改坏了的回捞路径,默认不带以免响应翻倍)。',
+      'previous_script_available=true 表示有上一版快照;传 include_previous=1 可取回上一版全文(误重跑/改坏了的回捞路径,默认不带以免响应翻倍)。' +
+      '★rewrite_additions(原稿已是剧本形态时才有,否则 null):逐行点名改写稿里**原稿没有**的声音行(added_voice_lines:旁白/台词/OS/字幕,会被配音念出来)' +
+      '与剪辑指令(edit_directives:硬切/叠化/转场等,镜间转场归平台转场字段管)。非空就逐条处置' + MODE_DECIDES('保留还是删') + ',不要的用 edit_rewritten_script 删掉;原稿已定稿的客户通常不要这些新增。',
     {
       episode_id: z.number().int().positive(),
       include_previous: z.boolean().optional().describe('取回上一版可拍稿全文(previous_script 快照)。默认 false;改坏了或误重跑时用'),
@@ -5164,7 +5166,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '③ 你自己看片判断每个接缝该用什么转场(manifest 给了 scene_boundary 场景边界作判据),' +
       '写一份 plan.json;④ 用 get_handoff_toolchain 拿到 compile_timeline.py 展开时间轴、' +
       'assemble.sh 装配出成片。工具链已经把「加了重叠转场之后字幕/对白/音效怎么跟着位移」算好了。\n' +
-      '\n【三个不看就会翻车的事实】\n' +
+      '\n【四个不看就会翻车的事实】\n' +
       '① **人声在哪要逐镜读 `shots[].voice_track.location`,不能读整集的 audio_contract.mode**——' +
       '后者是整剧级声明,而全画外旁白镜的旁白是平台在完成侧混进裸片的,同一集里逐镜可以不同。' +
       '四种取值各有各的处置:`separate_file`=对白在 dialogue_audio,不铺这镜就没台词;' +
@@ -5181,6 +5183,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       'trim_basis≠platform_timeline 的镜是整条不裁,notes 写了原因。工具链只认 0.1 的旧副本会拒收 0.2,重新 save_handoff_toolchain。\n' +
       '③ 字幕 cue、dialogue_audio.offset_ms、sfx[].offset_ms 的基准都是「该镜 trim 之后的第 0 毫秒」,' +
       '不是成片绝对时间。你加多少重叠转场都不用改它们——交给 compile_timeline.py 展开,别手算累加。\n' +
+      '④ **想在本地换旁白,读 `shots[].narration`,别把 clip 原声整段丢掉**:`clip_contains_narration` 说 clip 里有没有旁白;`clean_vendor_clip` 是不含平台旁白的干净厂商原片(画面与原片逐帧相同,拿它的音轨垫底再铺新旁白);`narration_stem` 是旁白独立轨(offset_ms 相对原片第 0 毫秒,已按平台摆放位置排好)。`status=not_retained` 是留档上线前出的存量镜,平台侧已拿不到干净原声,要么重生成该镜视频、要么整段替换 clip 音轨;`aligned_with_clip=false`(发的是合成片/口型片)时间基准与 clip 不同,入出点不能直接套用;`contains_vendor_speech=true` 的干净原片里有厂商自己念出的人声,别直接垫底。纯加字段,manifest_version 仍 0.2,fetch_pack.py 会一并下载。\n' +
       '\n拼之前先跑 build_av_timing_contract → get_av_timing_contract(免费):逐镜实测源片时长、平台终拼的入出点/转场占用/定格补帧、人声已混入视频还是独立轨,拿它核对你的时间轴总长。' +
       '\n想让平台代拼、要平台级质量闸(终拼预检/音画等长/响度母带),改用 compose_episode。',
     {

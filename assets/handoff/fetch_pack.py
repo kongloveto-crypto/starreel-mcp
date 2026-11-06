@@ -189,6 +189,27 @@ def main():
             jobs.append((clip.pop("url"), rel))
             clip["file"] = rel
 
+        # 旁白分轨（纯加字段，0.2 清单里有就下）：不含平台旁白的干净厂商原片 + 旁白独立轨。
+        # clean 与 clip 是同一个文件时不重复下载，指向 clip 那份
+        nar = sh.get("narration") or {}
+        cv = nar.get("clean_vendor_clip")
+        if cv and cv.get("url"):
+            if cv.get("same_file_as_clip") and clip.get("file"):
+                cv.pop("url")
+                cv["file"] = clip["file"]
+            else:
+                rel = f"clips/clean/shot_{tag}.mp4"
+                jobs.append((cv.pop("url"), rel))
+                cv["file"] = rel
+        st = nar.get("narration_stem")
+        if st and st.get("url"):
+            ext = os.path.splitext(urlparse(st["url"]).path)[1].lower()
+            if ext not in (".m4a", ".wav", ".mp3", ".aac"):
+                ext = ".m4a"
+            rel = f"audio/narration/shot_{tag}{ext}"
+            jobs.append((st.pop("url"), rel))
+            st["file"] = rel
+
         dlg = sh.get("dialogue_audio")
         if dlg and dlg.get("url"):
             rel = f"audio/dialogue/shot_{tag}.wav"

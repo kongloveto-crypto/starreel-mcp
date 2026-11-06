@@ -87,7 +87,7 @@ announces a condensed version as MCP `instructions` at connect time.
 | The customer has | Use | Never |
 |---|---|---|
 | A novel / outline / synopsis (not yet a screenplay) | `set_script` → `rewrite_script` (creative rewrite builds hooks and beats) → `review_script` | — |
-| A finished screenplay (scene headers + dialogue lines) | `set_script` → `rewrite_script` (auto two-pass fidelity: dialogue byte-locked) → `review_script`; force with `rewrite_pipeline: "two_pass"`, `fidelity_enforce: 1` | pasting it into `edit_rewritten_script` (400) |
+| A finished screenplay (scene headers + dialogue lines) | `set_script` → `rewrite_script` (auto two-pass fidelity: dialogue byte-locked) → `get_script` (read `rewrite_additions`: voice lines / edit directives the rewrite added that are not in the source — settle each before going on) → `review_script`; force with `rewrite_pipeline: "two_pass"`, `fidelity_enforce: 1` | pasting it into `edit_rewritten_script` (400) |
 | Wants to rewrite on another AI / says our rewrite "changed too much" | `get_script_format_spec` → external rewrite → `check_script_format` → `adopt_external_script` (exit A) or `set_script` + `rewrite_script` (exit B) | skipping the check; `edit_rewritten_script` |
 | A finished **shot list** (per-shot seconds / shot size / camera move) | `get_storyboard_table_spec` (the contract: shot-size / camera-move vocabulary, body layout, text-card syntax, a prompt for the external AI) → `check_storyboard_table` (same parser as the import; clear `errors`, read every `warning` — a missing duration, an unrecognised shot size or an empty body all get imported as-is) → `import_storyboard_table` (defaults to `auto_complete`: one background batch fills the professional fields and expands every shot's platform-built base description into full image / video prompts — metered text, tell the customer first; `auto_complete: false` imports only **and generates no composition contract** — read `contract_coverage` in the receipt and follow the remedy its `note` gives (normally `autofill_storyboards`) before generating frames) → `get_autofill_status` until `done` → `review_storyboards` | `rewrite_script` + `generate_storyboards` — strips every production parameter (measured: 8 shots / 36 s became 20 shots / 109 s); importing without the check; reviewing before the completion batch finishes (the token expires when shots change) |
 | **Structured data** — their own tool / spreadsheet export, or an external AI producing JSON (cast + scenes + shots in one go) | `get_bulk_import_spec` (contract + template + worked example + enums, same source as the validator) → `check_bulk_import` (same zod schema; unresolved character / scene references, dead shots and stage directions inside dialogue are surfaced) → `bulk_import_storyboards` (`mode: "replace"` only with the customer's explicit OK; defaults to `auto_complete`: professional fields for every shot, full image / video prompts only for shots that had no `image_prompt` — prompts you supply yourself are kept verbatim — metered text, tell the customer first; `auto_complete: false` imports only **and generates no composition contract** (visible head count, person / body-part / prop subject and shot size are then only inferred from text) — read `contract_coverage` in the receipt and follow the remedy its `note` gives (normally `autofill_storyboards`) before generating frames) → `get_autofill_status` until `done` → `review_storyboards` | converting the JSON to text for `import_storyboard_table`; hand-building shots with `update_shot`; reviewing before the completion batch finishes |
@@ -1824,6 +1824,16 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   and all subtitle/dialogue/SFX offsets are relative to **each shot's own trimmed
   start**, not to the final timeline — add whatever overlapping transitions you like
   and let `compile_timeline.py` expand them, never hand-compute the shift.
+  **Re-voicing narration locally**: read `shots[].narration` instead of throwing away
+  the clip's audio. `clip_contains_narration` says whether our narration is already in
+  the clip; `clean_vendor_clip` is the vendor clip *without* our narration
+  (frame-identical — use its audio as the bed); `narration_stem` is the isolated
+  narration track (offset_ms from millisecond 0 of the raw clip). `status="not_retained"`
+  means the shot predates retention and the clean audio no longer exists — regenerate
+  that shot's video or replace its audio wholesale; `aligned_with_clip=false` means a
+  composed / lip-synced clip was delivered and the timebase differs;
+  `contains_vendor_speech=true` means the clean clip has speech the video model voiced
+  itself. Additive only — `manifest_version` stays 0.2 and `fetch_pack.py` downloads both files.
 - **Edit**: `edit_video_shot`, `repaint_shot_video` / `reskin_shot_video` (keep the motion, redraw people / outfits), `regenerate_shot_video`, `split_shot`,
   `trim_shot`, `rerender_episode`. One generation per shot at a time: a **409 with
   `in_flight_generation_id`** means that shot is still generating from *different*
