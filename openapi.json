@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.311",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.311 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.314",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.314 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -6842,8 +6842,8 @@
     "/episodes/{episode_id}/bgm-plan": {
       "get": {
         "operationId": "get_bgm_plan",
-        "summary": "查本集配乐会分成几幕(免费、只读、不生成):每幕的幕号 act、覆盖镜号 sb_from~sb_to、时长、平均情绪强度",
-        "description": "查本集配乐会分成几幕(免费、只读、不生成):每幕的幕号 act、覆盖镜号 sb_from~sb_to、时长、平均情绪强度。要用 generate_bgm 的 director.acts 按幕锁定参数时,先调这个拿幕号。★这是独立的只读工具:看分幕**不要**去调 generate_bgm——那个一调就是扣费生成。",
+        "summary": "查本集配乐会分成几幕(免费、只读、不生成):每幕的幕号 act、覆盖镜号 sb_from~sb_to、时长、平均情绪强度、playable(整幕静音=false,不生成不扣费)",
+        "description": "查本集配乐会分成几幕(免费、只读、不生成):每幕的幕号 act、覆盖镜号 sb_from~sb_to、时长、平均情绪强度、playable(整幕静音=false,不生成不扣费)。要用 generate_bgm 的 director.acts 按幕锁定参数时,先调这个拿幕号。auto_split=scene_boundaries 表示分镜没有情绪强度数据、按场景分的幕;structure 是 set_bgm_structure 存的分幕点/静音段(null=自动)。客户觉得分得太粗、想在某镜换曲或让音乐骤停 → set_bgm_structure 按镜号指定。★这是独立的只读工具:看分幕**不要**去调 generate_bgm——那个一调就是扣费生成。",
         "tags": [
           "episodes"
         ],
@@ -6890,7 +6890,7 @@
       "get": {
         "operationId": "get_bgm_status",
         "summary": "查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数",
-        "description": "查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数。免费。customer_tracks 列出客户自有配乐(set_own_bgm 挂的);它非空说明本集已有配乐,别再 generate_bgm。配乐 done 后需重新 compose_episode 才进成片。",
+        "description": "查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数。免费。customer_tracks 列出客户自有配乐(set_own_bgm 挂的);它非空说明本集已有配乐,别再 generate_bgm。★last_run=最近一轮结果:status=failed 时 error 是失败原因,note 说明上一轮的配乐/候选是否保留——running 变 false 而 tracks 没变化时先看它,照实告诉客户,别盲目重试。done 时 trimmed 列出被裁过的曲子(厂商回得比所需长,落库前裁到本幕长度)。tracks / candidate_groups 里 over_limit=true 的曲子超过单轨 120 秒,成片只用本幕覆盖的那段(见 over_limit_note)。配乐 done 后需重新 compose_episode 才进成片。",
         "tags": [
           "episodes"
         ],
@@ -6905,6 +6905,123 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/episodes/{episode_id}/bgm-structure": {
+      "put": {
+        "operationId": "set_bgm_structure",
+        "summary": "按镜号指定本集 AI 配乐的分幕点与静音段(免费,只存设置、不生成)",
+        "description": "按镜号指定本集 AI 配乐的分幕点与静音段(免费,只存设置、不生成)。自动分幕只看分镜的情绪强度/场景,客户想「从第 N 镜起换一首」「第 N 镜音乐骤停」「第 N~M 镜不要配乐」时用这个。act_breaks=[镜号]:从这些镜开始换一首新曲子(新的一幕);silences=[{from_shot,to_shot?,mode}]:这些镜不放配乐,mode=cut 骤停(前一段 0.12 秒内收掉)/fade 常规淡出。镜号取 get_storyboards 的 storyboard_number。★存好后 get_bgm_plan 与 quote_bgm_candidates 都按新分幕算(幕数变了费用随之变,有候选报价要重新报);已生成的配乐不会自己变——要重新 generate_bgm,再 compose_episode 才进成片。整体覆盖:每次传完整的结构;传 structure:null 清除、回到自动分幕。镜号不存在/静音段重叠会 400。",
+        "tags": [
+          "episodes"
+        ],
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "structure": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "act_breaks": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "maxItems": 20,
+                            "description": "从这些镜号开始换一首新曲子(不含本集第一镜)"
+                          },
+                          "silences": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "from_shot": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "description": "静音段起始镜号"
+                                },
+                                "to_shot": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "description": "静音段结束镜号(含),不传=只静这一镜"
+                                },
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "cut",
+                                    "fade"
+                                  ],
+                                  "description": "cut(默认)=骤停;fade=常规淡出"
+                                }
+                              },
+                              "required": [
+                                "from_shot"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 20,
+                            "description": "这些镜不放配乐"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "整体覆盖;null=清除"
+                  }
+                },
+                "required": [
+                  "structure"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "StarReel envelope",

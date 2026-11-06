@@ -3629,11 +3629,36 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'get_bgm_plan',
-    '查本集配乐会分成几幕(免费、只读、不生成):每幕的幕号 act、覆盖镜号 sb_from~sb_to、时长、平均情绪强度。' +
+    '查本集配乐会分成几幕(免费、只读、不生成):每幕的幕号 act、覆盖镜号 sb_from~sb_to、时长、平均情绪强度、playable(整幕静音=false,不生成不扣费)。' +
       '要用 generate_bgm 的 director.acts 按幕锁定参数时,先调这个拿幕号。' +
+      'auto_split=scene_boundaries 表示分镜没有情绪强度数据、按场景分的幕;structure 是 set_bgm_structure 存的分幕点/静音段(null=自动)。' +
+      '客户觉得分得太粗、想在某镜换曲或让音乐骤停 → set_bgm_structure 按镜号指定。' +
       '★这是独立的只读工具:看分幕**不要**去调 generate_bgm——那个一调就是扣费生成。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/bgm-plan`)),
+  )
+  server.tool(
+    'set_bgm_structure',
+    '按镜号指定本集 AI 配乐的分幕点与静音段(免费,只存设置、不生成)。自动分幕只看分镜的情绪强度/场景,' +
+      '客户想「从第 N 镜起换一首」「第 N 镜音乐骤停」「第 N~M 镜不要配乐」时用这个。' +
+      'act_breaks=[镜号]:从这些镜开始换一首新曲子(新的一幕);silences=[{from_shot,to_shot?,mode}]:这些镜不放配乐,' +
+      'mode=cut 骤停(前一段 0.12 秒内收掉)/fade 常规淡出。镜号取 get_storyboards 的 storyboard_number。' +
+      '★存好后 get_bgm_plan 与 quote_bgm_candidates 都按新分幕算(幕数变了费用随之变,有候选报价要重新报);' +
+      '已生成的配乐不会自己变——要重新 generate_bgm,再 compose_episode 才进成片。' +
+      '整体覆盖:每次传完整的结构;传 structure:null 清除、回到自动分幕。镜号不存在/静音段重叠会 400。',
+    {
+      episode_id: z.number().int().positive(),
+      structure: z.object({
+        act_breaks: z.array(z.number().int().positive()).max(20).optional().describe('从这些镜号开始换一首新曲子(不含本集第一镜)'),
+        silences: z.array(z.object({
+          from_shot: z.number().int().positive().describe('静音段起始镜号'),
+          to_shot: z.number().int().positive().optional().describe('静音段结束镜号(含),不传=只静这一镜'),
+          mode: z.enum(['cut', 'fade']).optional().describe('cut(默认)=骤停;fade=常规淡出'),
+        }).strict()).max(20).optional().describe('这些镜不放配乐'),
+      }).strict().nullable().describe('整体覆盖;null=清除'),
+    },
+    async ({ episode_id, structure }) =>
+      jsonResult(await client.producePut(`/episodes/${episode_id}/bgm-structure`, { structure })),
   )
   server.tool(
     'set_episode_audio',
@@ -3818,6 +3843,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     'get_bgm_status',
     '查某集 AI 配乐生成状态:running(是否在生成)+已入库的配乐轨列表(track/覆盖镜段/淡入淡出)+cue 数。免费。' +
       'customer_tracks 列出客户自有配乐(set_own_bgm 挂的);它非空说明本集已有配乐,别再 generate_bgm。' +
+      '★last_run=最近一轮结果:status=failed 时 error 是失败原因,note 说明上一轮的配乐/候选是否保留——running 变 false 而 tracks 没变化时先看它,照实告诉客户,别盲目重试。' +
+      'done 时 trimmed 列出被裁过的曲子(厂商回得比所需长,落库前裁到本幕长度)。tracks / candidate_groups 里 over_limit=true 的曲子超过单轨 120 秒,成片只用本幕覆盖的那段(见 over_limit_note)。' +
       '配乐 done 后需重新 compose_episode 才进成片。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/bgm-status`)),
