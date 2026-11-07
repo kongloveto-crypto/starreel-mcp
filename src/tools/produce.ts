@@ -734,6 +734,11 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '运镜的「横移」映射 tracking、「摇」映射 pan(两者在反光面上的倒影行为不同,别混)。' +
       '`[字卡 9s] 行一 | 行二` 会建成卡镜(成片层直接渲黑底卡,不出图不出视频)。' +
       '★道具:`[道具] 名A、名B` 行按**本剧道具库里的道具名**绑定 prop_ids,正文里完整出现的道具名也自动绑;回执 prop_names_unresolved 列出没绑上的名字(先建道具再导,或改名)。' +
+      '★机位/站位/朝向/衔接(可选,原稿写了就照抄,没写别编):声明里加一段机位(侧拍/俯拍/仰拍/鸟瞰/过肩/反打/主观,如 `[镜 004 | 4s | 近景 | 固定 | 侧拍俯角]`)→ angle;' +
+      '声明里加「接」(紧接上镜)或「切」(硬切)一段 → continuity_intent,来源记 author、压过系统推断;' +
+      '正文 `[站位] 角色名 画左 面朝右;角色名 画右 面朝左` → character_positions / facing_directions(只给绑到本镜画面的角色落值;同场没写的镜由系统按已写朝向补齐)。' +
+      '不写这些的话 angle 为空、站位朝向只能靠推断,同场人物左右与机位容易镜镜乱跳。' +
+      '回执 camera_angle_shots(落了机位的镜号)、blocking{shots, unresolved:[{shot_number,name,reason}]}(reason: no_character_name=行里没有本剧角色名 / not_in_shot=该角色没绑到本镜 / no_direction=没认出方位词)、continuity_intent_marks(作者标记,首镜的 applied=false)。' +
       '★不传 content 时读本集「原始内容」。没有任何逐镜声明会被 400 拒(那是剧本不是分镜表,请走正常拆镜)。' +
       '★本集已有分镜时返回 409 并告知镜数,确认要替换再带 confirm_replace:true(旧镜转已删除状态、可恢复)。' +
       '秒数/景别缺失的镜照常导入但会在 issues 里列出——系统不替客户猜,猜错一个秒数就是成片时长错。' +
@@ -762,6 +767,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★什么时候用:客户手上是成品分镜表(逐镜秒数/景别/运镜)、或想让外部 AI/自己的工具把镜头设计整理成我们认的格式时——**在 import_storyboard_table 之前**先调它。' +
       '★契约要点:一镜一行 `[镜 001 | 4s | 特写 | 固定]`(加粗式/全角竖线/繁体也认);景别与运镜只认白名单里的词(写别的会留空);声明之后的正文=画面叙述(至少一行,否则出不了图)+ `角色名：台词` + [SFX:]/[BGM:]/[VFX:] 标注;' +
       '整屏文字用 `[字卡 9s] 行一 | 行二`;STYLE/NEG 全片风格块**不写进表**(写进项目设定);`## 非场景标题` 会结束当前镜。' +
+      '★可选的机位段(侧拍/俯拍/仰拍/过肩/反打…)、衔接段(接/切)与正文 `[站位] 角色名 画左 面朝右` 行:原稿里有就让外部 AI 照抄,能显著减少同场人物左右站位、机位乱跳。' +
       '转发给外部 AI 时**务必把 filled_example 一起给**:格式正确率靠可模仿的完整样例。',
     {
       drama_title: z.string().optional().describe('仅用于范本抬头,不影响契约本身'),
@@ -779,7 +785,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     'check_storyboard_table',
     '**导入前的分镜表自检**:用导入端点**同一个解析器**跑一遍,返回 errors / warnings / stats / shots(逐镜解析预览:每一镜会变成什么秒数·景别·运镜·标记·正文字数)。免费·纯规则·不调模型·不落库·可反复跑。' +
       '★errors = 导入会 400 的(空 / 没有任何逐镜声明=这不是分镜表)+ 残留 〈…〉 占位符;必须清零。' +
-      '★warnings = 导入照常但结果会缺东西的:缺秒数(按 4 秒建)/景别没认出(留空)/运镜没认出(留空)/声明后没画面叙述(出不了图的死镜)/没有场景头(绑不上场景)/数据卡没用字卡语法(不进成片)/单镜>15 秒/STYLE 块/镜号重复——把 message 清单原样发回外部 AI 让它只修这些点。' +
+      '★warnings = 导入照常但结果会缺东西的:缺秒数(按 4 秒建)/景别没认出(留空)/运镜没认出(留空)/声明后没画面叙述(出不了图的死镜)/没有场景头(绑不上场景)/数据卡没用字卡语法(不进成片)/单镜>15 秒/STYLE 块/镜号重复/[站位] 行没认出方位词(blocking_no_direction)/第一镜写了接·切(continuity_mark_first_shot)——把 message 清单原样发回外部 AI 让它只修这些点。' +
+      '★shots 逐镜预览另带 angle(将落库的机位)、continuityMark(接→continuous/切→cut)、blockingLines([站位] 行数);[站位] 里的名字能不能绑上要看本剧角色表,导入回执 blocking.unresolved 会报。' +
       '★这里绿了,import_storyboard_table 就不会有 issues(同一份代码)。',
     { content: z.string().min(1).describe('分镜表全文(一次一集,上限 6 万字)') },
     async ({ content }) => jsonResult(await client.producePost('/storyboard-table/lint', { content })),
@@ -835,6 +842,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '查本集后台补全批次(导入 auto_complete / autofill_storyboards 发起的 AI 一键填空)的进度与回执:{ status: running|done|failed|idle, total, done, ok, fail, skipped_no_gap, fields_written_counts, contract_coverage }。免费。' +
       '★回执就是「补全写了什么」的证据:补全写的是内部叙事字段与构图契约,get_storyboards / get_shot_prompts **读不到**,回读看不到变化属正常——看这里的计数即可。' +
       'skipped_no_gap=没有空缺、跳过未调 AI 未扣费的镜数;fields_written_counts=按字段名计的写入镜数(如 {shot_intent: 44});' +
+      '导入通道的补全还会给画面里缺站位/朝向的角色补上(只填空,不覆盖分镜表 [站位] 行写的),计数在 facing_directions / character_positions 两项里。' +
       'contract_coverage={total, missing_contract}=本集出图镜数与仍缺构图契约的镜数。只给计数、不给字段内容,把这几个数原样告诉客户。' +
       '★导入带自动补全后必须等 status=done 再 review_storyboards / generate_frames——补全逐镜改写字段,先审查的 review_token 会因内容变化失效。' +
       '每镜数十秒,整集可能十几分钟;轮询间隔 ≥10 秒,别紧轮。status=failed 或 fail>0 时看 fail 数,少量失败的镜可直接 autofill_storyboards 重跑(只填空模式下已补过的镜跳过、不调 AI、不扣费;只有没补过的镜计费)。',
@@ -1089,6 +1097,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '现在整集一次拿到(此前只有 get_shot_prompts 能逐镜问,一集几十次没人会去问)。' +
       '先 update_shot 把结束状态写进 last_frame_prompt 再出尾帧:照现状硬出的历史成功率 9.4%,写了终态的 40.2%,' +
       '而每次被拒都照常扣费。确实该「几乎不变」的镜才用 generate_shot_frame 的 allow_missing_terminal 放行。' +
+      '★continuity_intent_source=本镜衔接意图的来源:author(分镜表「接/切」或 update_shot 显式写)/ inferred(系统按文字推断)/ system(运行时防护或误标修复写入)/ null(旧数据未知)。' +
+      '一集全是 inferred = 作者从没声明过哪镜接、哪镜切,同场人物站位与机位乱跳时先查这个;意图值本身用 get_shot_prompts 逐镜读。' +
       '★first_frame_source/last_frame_source=\'upload\' 表示该帧是**外部上传图**(绕开了身份锚/画风锚/' +
       'best-of-N/帧审计整条质量链路)——人物·服装·画风漂移排查先看这些镜;外部图导致的漂移不是平台生成质量问题,' +
       '修复正路是删掉外部图改走 generate_shot_frame 平台重生。' +
@@ -3323,7 +3333,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '带 #变体 的标记是那张变体图的唯一来源;给未绑定的角色写标记会把他的图注入进来。' +
       '★这是分镜表里的正文层;出图/出视频时平台还会在其上拼身份锚、一致性约束与参考图指令(不在此处,也无需你写)。' +
       '改完提示词不会自动重出图/视频,要让画面跟上得再 regen 对应镜。' +
-      '★first_frame_prompt 是真实字段(空就是 null,不会回退成 image_prompt);first_frame_basis 说首帧正文以哪条为准:first_frame_prompt=它作为 [START FRAME] 段排在 image_prompt 之前、压过它,image_prompt=首帧只按 image_prompt 出。review 层 agent_qc 素材的 shot_spec 同一口径。',
+      '★first_frame_prompt 是真实字段(空就是 null,不会回退成 image_prompt);first_frame_basis 说首帧正文以哪条为准:first_frame_prompt=它作为 [START FRAME] 段排在 image_prompt 之前、压过它,image_prompt=首帧只按 image_prompt 出。review 层 agent_qc 素材的 shot_spec 同一口径。' +
+      '★continuity_intent_source=剪辑意图的来源(author 作者声明 / inferred 系统推断 / system 运行时写入 / null 旧数据未知)。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) => jsonResult(await client.produceGet(`/storyboards/${storyboard_id}/prompts`)),
   )
