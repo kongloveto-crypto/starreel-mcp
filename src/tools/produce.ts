@@ -4275,7 +4275,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       + '· historical —— 可考据的历史朝代;这档会要求画面向**考据写实**靠拢。\n'
       + '· fantasy —— ★仙侠/奇幻/仙境:修真世界、妖灵化形一类**非写实**的东方奇幻。'
       + '这类项目**别填 historical**——那档要求考据写实,会把发光灵气、悬浮地貌、非人化形'
-      + '一并判成「不合时代」,把画面往写实古代拽。\n'
+      + '一并判成「不合时代」,把画面往写实古代拽。'
+      + '★这档基线默认要求「浮空地形 / 云海 / 发光植物」等仙侠奇观;非仙侠的奇幻(拟人动物、童话森林等)不想要哪项,'
+      + '就写进 negative(如 floating islands / 云海),基线里对应那项会被去掉(get_era_contract 的 baseline_suppressed 可核对)。\n'
       + '· surreal —— ★现代 + 超现实:当代都市里有作者设定的超现实元素(超现实人体、都市异象)。'
       + '基线同 modern;把超现实设定逐条写进 positive,它们被当作世界观正典、审计不判时代冲突;'
       + '其中描述人物身体的设定适用于画面里每个人(含无参考的路人与人群),描述环境的只作用于世界。这类项目**别填 fantasy**——那档写死东方仙侠并禁当代服装。\n'
@@ -4290,7 +4292,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
           '★只写世界观层面的约束(整体设定、规则、风貌),别写具体的生物、天体、物件:positive 会被注入本集**每一张**空景基板,' +
           '写进一个具体元素,连回忆场景、不同时段的场景基板都会画出它;具体元素写进出现它的那几镜的分镜'),
       negative: z.array(z.string()).optional()
-        .describe('额外的禁止项(可留空)。写该档基线没覆盖、但本项目必须禁的东西'),
+        .describe('额外的禁止项(可留空)。写该档基线没覆盖、但本项目必须禁的东西。'
+          + 'fantasy 档:点名浮空地形 / 云海 / 发光植物中的哪项,基线就不再要求那项'),
     },
     async ({ episode_id, ...rest }) =>
       jsonResult(await client.producePut(`/episodes/${episode_id}/era-contract`, rest)),

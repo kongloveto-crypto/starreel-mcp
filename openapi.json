@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.323",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.323 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.327",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.327 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -7818,7 +7818,7 @@
       "put": {
         "operationId": "set_era_contract",
         "summary": "设**本集**的时代契约(免费,纯文本写库)",
-        "description": "设**本集**的时代契约(免费,纯文本写库)。★这是唯一压得过视觉锁的时代机制——古装/民国/仙侠类项目**出图前必设**,不设的话平台只能靠提示词正文堆字对抗,时代错乱(现代物件混进古代画面、仙境被画成写实古代)基本都是这里空着导致的。\n五档怎么选:\n· modern —— 现代/当代都市。不确定时用这档。\n· republican —— 民国、二十世纪早期。\n· historical —— 可考据的历史朝代;这档会要求画面向**考据写实**靠拢。\n· fantasy —— ★仙侠/奇幻/仙境:修真世界、妖灵化形一类**非写实**的东方奇幻。这类项目**别填 historical**——那档要求考据写实,会把发光灵气、悬浮地貌、非人化形一并判成「不合时代」,把画面往写实古代拽。\n· surreal —— ★现代 + 超现实:当代都市里有作者设定的超现实元素(超现实人体、都市异象)。基线同 modern;把超现实设定逐条写进 positive,它们被当作世界观正典、审计不判时代冲突;其中描述人物身体的设定适用于画面里每个人(含无参考的路人与人群),描述环境的只作用于世界。这类项目**别填 fantasy**——那档写死东方仙侠并禁当代服装。\n★设完不会自动重出已生成的图:要让画面跟上,得再调 generate_frames / regenerate_scene_image。★某一场要破例,用 update_scene 的 era_contract 单独覆写(场级压过集级)。",
+        "description": "设**本集**的时代契约(免费,纯文本写库)。★这是唯一压得过视觉锁的时代机制——古装/民国/仙侠类项目**出图前必设**,不设的话平台只能靠提示词正文堆字对抗,时代错乱(现代物件混进古代画面、仙境被画成写实古代)基本都是这里空着导致的。\n五档怎么选:\n· modern —— 现代/当代都市。不确定时用这档。\n· republican —— 民国、二十世纪早期。\n· historical —— 可考据的历史朝代;这档会要求画面向**考据写实**靠拢。\n· fantasy —— ★仙侠/奇幻/仙境:修真世界、妖灵化形一类**非写实**的东方奇幻。这类项目**别填 historical**——那档要求考据写实,会把发光灵气、悬浮地貌、非人化形一并判成「不合时代」,把画面往写实古代拽。★这档基线默认要求「浮空地形 / 云海 / 发光植物」等仙侠奇观;非仙侠的奇幻(拟人动物、童话森林等)不想要哪项,就写进 negative(如 floating islands / 云海),基线里对应那项会被去掉(get_era_contract 的 baseline_suppressed 可核对)。\n· surreal —— ★现代 + 超现实:当代都市里有作者设定的超现实元素(超现实人体、都市异象)。基线同 modern;把超现实设定逐条写进 positive,它们被当作世界观正典、审计不判时代冲突;其中描述人物身体的设定适用于画面里每个人(含无参考的路人与人群),描述环境的只作用于世界。这类项目**别填 fantasy**——那档写死东方仙侠并禁当代服装。\n★设完不会自动重出已生成的图:要让画面跟上,得再调 generate_frames / regenerate_scene_image。★某一场要破例,用 update_scene 的 era_contract 单独覆写(场级压过集级)。",
         "tags": [
           "episodes"
         ],
