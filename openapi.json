@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.322",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.322 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.323",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.323 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -10849,7 +10849,7 @@
       "get": {
         "operationId": "get_scene_group_plan",
         "summary": "查某一集的场景组规划(镜头如何归组做连续长镜)",
-        "description": "查某一集的场景组规划(镜头如何归组做连续长镜)。免费。★先看回执顶层 active:false = 本剧长镜模式(scene_group_mode)未开启,groups 只是「开启后会怎么分」的预览、**不生效**——出视频按单镜逐个生成、按单镜计费,regenerate_shot_video 只动那一镜;要用分组先 update_project_settings 开启长镜模式。active:true 时 merged=true 的组才会整组一次生成。",
+        "description": "查某一集的场景组规划(镜头如何归组做连续长镜)。免费。★先看回执顶层 active:false = 本剧长镜模式(scene_group_mode)未开启,groups 只是「开启后会怎么分」的预览、**不生效**——出视频按单镜逐个生成、按单镜计费,regenerate_shot_video 只动那一镜;要用分组先 update_project_settings 开启长镜模式。active:true 时 merged=true 的组才会整组一次生成。★engine_excluded:true = 本剧视频引擎(可灵 4.0)不支持场景组 / 关键帧组:active 恒为 false、limits=null、groups 为空,出视频逐镜生成、逐镜计费——这与场景归属无关,别去补场景;要并组得先换剧级视频引擎(可灵 4.0 以外的引擎才能并组,多关键帧组只有 seedance-2.5),blockers 里 engine_excluded 的说明原样讲给客户。",
         "tags": [
           "episodes"
         ],

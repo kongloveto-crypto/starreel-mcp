@@ -4812,7 +4812,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '查某一集的场景组规划(镜头如何归组做连续长镜)。免费。' +
       '★先看回执顶层 active:false = 本剧长镜模式(scene_group_mode)未开启,groups 只是「开启后会怎么分」的预览、**不生效**——' +
       '出视频按单镜逐个生成、按单镜计费,regenerate_shot_video 只动那一镜;要用分组先 update_project_settings 开启长镜模式。' +
-      'active:true 时 merged=true 的组才会整组一次生成。',
+      'active:true 时 merged=true 的组才会整组一次生成。' +
+      '★engine_excluded:true = 本剧视频引擎(可灵 4.0)不支持场景组 / 关键帧组:active 恒为 false、limits=null、groups 为空,出视频逐镜生成、逐镜计费——这与场景归属无关,别去补场景;要并组得先换剧级视频引擎(可灵 4.0 以外的引擎才能并组,多关键帧组只有 seedance-2.5),blockers 里 engine_excluded 的说明原样讲给客户。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/scene-group-plan`)),
   )
