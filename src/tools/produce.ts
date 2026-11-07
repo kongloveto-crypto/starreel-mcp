@@ -3279,6 +3279,13 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       video_prompt: z.string().optional().describe('视频(动态/运镜/表演)提示词**正文**(全量覆盖本镜现值)。★同 image_prompt:先读现值、保留 @char/@scene 标记'),
       first_frame_prompt: z.string().optional().describe('本镜**开始时**画面是什么样(首帧目标状态正文,全量覆盖现值)。送达提示词里作为 [START FRAME] 段排在最前,优先级高于 image_prompt——所以 image_prompt 改了不生效时,往往是这条在压着它。★同 image_prompt:先 get_shot_prompts 读现值、原样保留 @char/@scene 标记'),
       last_frame_prompt: z.string().optional().describe('本镜**结束时**画面是什么样(尾帧目标状态正文,全量覆盖现值)。送达提示词里作为 [END FRAME] 段。★★出尾帧被 TERMINAL_DESC_GATE 拦下时就是补这一条:写清结束时的状态(什么变了/变成什么样),再重新出尾帧。不补而直接重试必然重复被拒且照常扣费。get_shot_prompts 的 terminal_desc_missing=true 即本镜需要它'),
+      shot_constraints: z.array(z.string().max(200)).max(12).nullable().optional().describe('本镜**拍摄约束**(每条一句,≤12 条,每条 ≤200 字;**全量覆盖**现值,null 或 [] 清空)。' +
+        '来源通常是剧本 [VFX:] 标注,拆镜时落进本镜。出图时作为 [SHOT CONSTRAINTS](必须做到)/ [DO NOT GENERATE](含「后期合成 / 不交生成 / 不入画」等措辞的那几条,不要画)段送达,且位于不可裁剪段。' +
+        '★写「X 不在画面内 / 不入画」的条目,接缝审核也读(按剧灰度):接上一镜尾帧时 X 在本镜首帧消失不再判不连续——没写进来的东西消失照样会被拒。' +
+        '★改了画面正文而这里还留着旧要求,送达提示词会和新正文打架:先 get_shot_prompts 读 shot_constraints 现值再改。改完不会自动重出图。'),
+      negative_action: z.string().max(240).nullable().optional().describe('本镜**禁止项**(≤240 字,分号或换行分隔多条,如「不要看向镜头；不要出现某道具」;**全量覆盖**现值,null 或空串清空)。' +
+        '出图出视频作为 [DO NOT IN THIS SHOT] 段送达。其中「不要出现 X」这类缺席声明接缝审核也读(同 shot_constraints)。' +
+        '★改 action 时平台可能按灰度自动清空它(回执 derived_fields_reset 会说),同一请求一起写就不会被清。现值用 get_shot_prompts 读。改完不会自动重出图/视频'),
       expression_hint: z.string().max(120).nullable().optional().describe('本镜角色的**面部表情/神态**(≤120 字,一句具体的面部描述,如「眼眶泛红、强忍泪水、嘴角紧抿」)。' +
         '填了就**压过**平台按台词/氛围的反推——反推只有 7 种预设情绪、且台词里没有情绪词时什么都不加,剧本神态写在动作或旁白里的镜常常因此画成平静脸。' +
         '它总会压过平台反推并送进**出图**提示词;但「作为独立表情块送达、不被身份锁当成五官描述作废」与「送进视频提示词、整段保持首帧表情」两项**目前按剧灰度开放**' +
@@ -3306,6 +3313,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '不该出现的人从 character_ids 解绑),再调本工具;不改正文直接调多半回 unchanged。' +
       '★一次文本 AI 调用,按 token 后付(与 autofill_storyboards 同链路),调用前告知客户。' +
       '★只改契约这一个字段,不碰台词/提示词/其它专业字段;已出的首尾帧不会自动重出,要让画面跟上需对本镜重新出帧(先报价)。' +
+      '★updated 时本镜在用首尾帧的帧审计会按新契约在后台免费重审(回执 frame_reaudit 列出重审了哪几张,不出图不扣点),之后 review_frames 的人数判断按新契约。' +
       '★updated 会作废本镜及同集未消费的出帧/出视频报价,之后要重新报价。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) =>
@@ -3321,6 +3329,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★同时回 description(画面描述)、lighting(本镜用光)与 sound_effect(本镜音效)现值——review_storyboards 的禁区词命中常在 description / sound_effect,改前先在这里读;用光写 lighting。' +
       '★同时回 shot_type(景别)/ angle(机位)/ camera_movement(运镜)/ continuity_intent(剪辑意图)现值——update_shot 改完这几项就在这里回读核对(整集 get_storyboards 不含它们);null=未设。' +
       '★同时回 action(动作,update_shot 可改,改前先在这里读)与 action_in / action_out(动作起止姿态,只读)现值。' +
+      '★同时回 shot_constraints(拍摄约束,逐条原文数组,null=无)与 negative_action(禁止项,null=无)现值——出图送 [SHOT CONSTRAINTS] / [DO NOT GENERATE] / [DO NOT IN THIS SHOT] 就来自这两条;改了正文后它们仍是旧要求时用 update_shot 改或清空。' +
       '★同时回 frame_contract{on_screen_count, subject_kind, stale, stale_fields?, binding_conflict?, note?}:本镜构图契约的**结论**——' +
       '出图组织画面、帧审计判人数都按它(契约本体不对外)。stale=true = 契约生成后改过景别 / 绑定 / 画面描述等、可能已过期;' +
       'binding_conflict=true = 绑定的角色全部只出声音而契约仍要画人;两种都按 note 建议客户调 rederive_shot_contract(按 token 后付)。' +
