@@ -288,7 +288,8 @@ export const WORKFLOW_HINT =
   '接完还担心拼起来跳(人物左右位置、运动方向、景别对不上),出视频前可选 audit_seam_directions(查主体跳边/运动反向/景别跳级)(先 dry_run 报价,按 token 扣费,提示性不拦),结论用 get_seam_directions 读、讲给客户挑着修。' +
   '★★【尾帧别跳·出帧是两趟】generate_frames 默认只出首帧。约三成的镜**末态≠首态**(大运镜/物体脱手/状态改变),这些镜需要一张独立尾帧,而判据在平台侧、你从分镜文本猜不出来——' +
   '所以首帧出完必须调一次免费的 tail_frame_plan 拿逐镜清单,再 frame_type=last_frame 补上(generate_frames 的响应体里 shots_needing_last_frame 只数**出视频时送得到**的尾帧,不为 0 别直接去 review_frames;last_frame_seam_anchor_only 是送不到视频、只当接缝锚的镜,不需要就别出)。' +
-  '跳过不报错、不拦你——代价是那些镜出视频时只有首帧一个锚,末态由模型自由发挥:动作做不到位、大运镜结束又回到起点构图。生产实测 32 集里 30 集整集只出了首帧,其中 23 集一路出完了视频。' +
+  '跳过不报错、不拦你——代价是那些镜出视频时只有首帧一个锚,末态由模型自由发挥:动作做不到位。生产实测 32 集里 30 集整集只出了首帧,其中 23 集一路出完了视频。' +
+  '★大运镜例外:出视频只送首帧(防首尾硬插值变形),平台生成的尾帧不送进视频,补了救不了结尾;要钉住大运镜的结尾,只能改成固定机位(update_shot 把 camera_movement 写成「固定」,并删掉 action 与 video_prompt 里的推/拉/摇/移/升降/环绕/变焦等运镜词——平台按这三处的运镜关键词判大运镜、不看幅度,只写「小幅摇镜」照样判中),或上传客户自有尾帧(upload_shot_frame frame_type=last_frame,上传的会送达)。' +
   '★★【尾帧被 TERMINAL_DESC_GATE 拦下时:改文本,不是重试】报「此镜标为状态改变,但没有任何地方说明结束时是什么样子」的镜,'  +
   '用 update_shot 把**结束时画面什么样**写进该镜 last_frame_prompt,再重出尾帧。' +
   '★更好的是**别撞**:出尾帧前先 get_storyboards 看一眼,terminal_desc_missing=true 的镜整集一次就列出来了(免费),' +
@@ -1471,7 +1472,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★尾帧补完(或本工具报 0)之后的下一步是接缝:chain_frames(dry_run:true) 看计划与预估、客户确认后执行,再 review_frames。' +
       FIRST_FRAME_NOT_DELIVERED_HINT + KEYFRAME_ADVISORY_HINT +
       '★跳过尾帧不会报错,但那些镜出视频时只有首帧一个锚,末态由模型自由发挥——' +
-      '动作做不到位、大运镜结束又回到起点构图,多半就是这么来的。零扣费,可随时调。',
+      '动作做不到位多半就是这么来的。' +
+      '★大运镜例外:出视频只送首帧(防首尾硬插值变形),平台生成的大运镜尾帧不送进视频,补了救不了结尾画面(所以它们标 tail_delivered=false 或进 not_delivered)。' +
+      '客户要钉住大运镜的结尾,只有两条路:改成固定机位(update_shot 把 camera_movement 写成「固定」,并删掉 action 与 video_prompt 里的推/拉/摇/移/升降/环绕/变焦等运镜词——平台按这三处的运镜关键词判大运镜、不看幅度,只写「小幅摇镜」照样判中),或上传客户自有尾帧(upload_shot_frame frame_type=last_frame,上传的尾帧会送达)。零扣费,可随时调。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/frames/tail-plan`)),
   )

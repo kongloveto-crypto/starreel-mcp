@@ -505,6 +505,17 @@ content that will be rejected.
    never send their tail frame to video — they only help `chain_frames` as a seam anchor,
    so skip them unless that anchor is wanted. `generate_videos` needs at
    least one first frame in the episode.
+   **A big camera move is the exception to "fill the tail frame to fix the ending".**
+   The platform renders a big camera move from its first frame only (sending both
+   frames makes the hard first→last interpolation warp), so a platform-generated tail
+   frame for that shot never reaches the video and cannot stop it from drifting back to
+   the opening composition. If the customer needs that ending pinned, there are two
+   real options: make it a fixed-camera shot (`update_shot`: set `camera_movement` to
+   "fixed" and remove push/pull/pan/tilt/track/crane/orbit/zoom wording from `action`
+   and `video_prompt` as well — big camera moves are detected by keywords across those
+   three fields, not by amplitude, so "slight pan" still counts), or have
+   the customer supply their own ending image via `upload_shot_frame` with
+   `frame_type=last_frame` — an uploaded last frame is exempt and is delivered.
    **If a tail frame is refused with `TERMINAL_DESC_GATE`** ("this shot is marked as a
    state change, but nothing says what it ends up looking like"), the fix is text, not a
    retry: write the ending state into that shot's `last_frame_prompt` via `update_shot`,
