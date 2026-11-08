@@ -544,8 +544,14 @@ export interface ModelCard {
   weaknesses: string[]
   best_for: string
   avoid_for?: string
+  /** 本卡实测数字的取样日期(YYYY-MM-DD);数字是生产统计快照,不随厂商升级自动更新 */
+  measured_at: string
 }
 export interface ModelCombo { scenario: string; image_model: string; video_engine: string; resolution: string; why: string }
+/** 单镜 / 单组 / 单次换模型的入口。param_tools 是真正收该参数的工具(哨兵与 produce.ts 双向比对);then_tools 是凭 quote_id 派发、自己不再收参数的工具。 */
+export interface ModelOverrideEntry { scope: string; param: 'image_model' | 'video_engine' | 'model' | 'shot_engines'; param_tools: string[]; then_tools?: string[]; persists: boolean; caveat: string }
+/** 某类资产用哪个模型、能不能单独换。override_param=null 表示这些工具不收模型参数(哨兵钉住)。 */
+export interface AssetModelRoute { asset: string; tools: string[]; override_param: 'image_model' | 'video_engine' | 'model' | 'shot_engines' | null; model_source: string; advice: string }
 
 /**
  * v0.9.2018 — 模型选型指南。工具参数描述只列「型号 + 价格」,这里回答「哪个好、好在哪、坑在哪、该怎么配」。
@@ -556,11 +562,13 @@ export const MODEL_GUIDE = {
   principle:
     '模型是 drama 级设置(create_drama / update_project_settings 的 image_model、video_engine),整剧统一画风与身份;' +
     '单镜可临时覆盖(图:`generate_shot_frame` 传 image_model,且须与 `quote_shot_frame` 传的同一个;视频编辑:`edit_video_shot` 传 model)。' +
+    '全部单镜 / 单组 / 单次的换模型入口见 override_entry_points;定妆、场景、道具、封面等各类资产用的是哪个模型、能不能单独换,见 asset_routing;数字的取样日期见各卡 measured_at 与 freshness。' +
     '选型要主动讲给客户:把价差与优劣摆出来,让客户定,别默默用默认值。' +
     '比较模型「贵不贵」要按**每张可用图/每条可用镜头**算,不是按单张单价——重抽次数差几倍时,单价低的反而更贵。',
   image_models: [
     {
       id: 'gpt-image-2.5-flare', name: 'ChatGPT Image 2.5 Flare', is_default: true,
+      measured_at: '2026-09-25',
       price: '基础 11 点 + 每张参考图 18 点(按实际送出的参考图计;常见 4~6 张 ≈ 80~120 点/张);报价是区间,按 estimated_points 备余额',
       strengths: [
         '一次过率最高:同期实测 60.1%(223 个镜位),中位 1 张就出可用图;Nano Banana 2 同口径 4.9%',
@@ -579,6 +587,7 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'gpt-image-2.5-sunburst', name: 'ChatGPT Image 2.5 Sunburst',
+      measured_at: '2026-09-25',
       price: '与 flare 同价(11 + 18/参考图)',
       strengths: ['编辑精度优先,中文字形与细部更准', '其余能力同 flare(16 张参考图、1088×1920)'],
       weaknesses: ['比 flare 慢约 5 秒/张', '平台内样本少,一次过率未单独实测;安全拒绝特性按同厂商同代推定与 flare 相近'],
@@ -587,6 +596,7 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'gemini-3.1-flash-image', name: 'Nano Banana 2',
+      measured_at: '2026-09-25',
       price: '一口价:镜头帧 71 点/张(1K);定妆照、设定图等身份锚 119 点/张(2K);参考图不另收(最多 14 张)',
       strengths: [
         '画风锚定稳:写实电影感剧不容易漂成动漫风',
@@ -603,14 +613,16 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'gemini-3-pro-image', name: 'Nano Banana Pro',
+      measured_at: '2026-09-25',
       price: '175 点/张一口价(2K)',
       strengths: ['画面最精细', '安全拒绝实测 0 次(145 张)', '早期同口径成功率 88.2%,每镜位平均 2.4 张候选'],
       weaknesses: ['最贵,是 flare 常见单价的约 1.5~2 倍', '样本量小(34 个镜位),与 GPT 2.5 的一次过率未做同窗口对比'],
-      best_for: '封面、海报、定妆锚这类少量关键图',
-      avoid_for: '整集批量出镜头帧',
+      best_for: '少量关键镜头帧要最精细时,逐镜 `quote_shot_frame` → `generate_shot_frame` 传 image_model=gemini-3-pro-image;或镜数很少的短片整剧设为它(定妆/场景/道具图也会跟着用它,按 175 点/张计)',
+      avoid_for: '整集批量出镜头帧;也别对客户承诺「只有封面/海报/定妆图用 Pro」——这几类没有按张选模型的入口(见 asset_routing)',
     },
     {
       id: 'gemini-3.1-flash-lite-image', name: 'Nano Banana 2 Lite',
+      measured_at: '2026-09-25',
       price: '31 点/张(经济档,厂商恒 1K)',
       strengths: ['最便宜档之一', '出图快,适合快速看构图'],
       weaknesses: ['分辨率固定 1K,细节上限最低', '平台内未系统实测质量,不建议作交付帧'],
@@ -619,6 +631,7 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'doubao-seedream-5-0-260128', name: 'Seedream 5.0',
+      measured_at: '2026-09-25',
       price: '31 点/张(经济档)',
       strengths: ['经济档价格', '出图像素高(厂商最低约 1920×1920 级)', '安全拒绝实测 0 次(170 张)', '参考图最多 10 张'],
       weaknesses: ['平台内样本少,一次过率与手部结构未系统实测', '与 GPT 2.5 / Nano Banana 画风差异明显,整剧中途换它会跳风格'],
@@ -633,11 +646,12 @@ export const MODEL_GUIDE = {
     '④ 写实电影感剧里某镜画风漂成动漫 → 这一镜换 gemini-3.1-flash-image 重画。',
     '⑤ 手部/持物/多人同框镜出现坏手、手物融合 → 用(或换回) gpt-image-2.5-flare 重画;Nano Banana 系列在这类镜上明显更差。',
     '⑥ 只是试风格、看构图 → gemini-3.1-flash-lite-image 或 Seedream 5.0(31 点),交付前切回主模型重出。',
-    '⑦ 封面/海报/定妆锚要最精细 → gemini-3-pro-image(175 点),只用在少量关键图上。',
+    '⑦ 个别关键镜要最精细 → 那几镜单独 `quote_shot_frame` → `generate_shot_frame` 传 image_model=gemini-3-pro-image(175 点/张)。定妆/场景/道具图与封面海报**没有**按张选模型的入口(前者跟随剧级 image_model,后者工具不收模型参数):想让它们也用 Pro 只能整剧设 Pro,只适合镜数很少的短片。',
   ],
   video_engines: [
     {
       id: 'seedance-2.5', name: 'Seedance 2.5', default_for: '动漫/风格化剧;写实真人剧在该题材可用时也默认它',  // 视频引擎无全局默认:不传时后端按画风 + 2.5 写实开关兜底盖章(new-drama-video-engine.ts),不查菜单题材可用性
+      measured_at: '2026-09-25',
       price: '价格基准:480p/720p/1080p 约 0.45×/1×/2.5×(以本引擎 720p 为 1×,无 4K;实价以 quote_* 报价为准);单镜 2~30 秒',
       strengths: [
         '指令遵循与人脸细节最强,写实真人剧首选(以菜单当前可用为准)',
@@ -654,6 +668,7 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'hailuo-3', name: 'MiniMax H3', default_for: '写实真人剧(含未定画风)在 seedance-2.5 写实题材不可用时的默认',
+      measured_at: '2026-09-25',
       price: '720p(=768P)约 0.33×、1080p(=2K)约 0.53×(以 seedance-2.5 720p 为 1×,实价以报价为准);无独立 480p 档(选了也按 768P 计);单镜 4~15 秒',
       strengths: [
         '约 1/3 成本,还能出 2K',
@@ -672,6 +687,7 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'wan3.0', name: 'WAN 3.0',
+      measured_at: '2026-09-25',
       price: '480p/720p/1080p 约 0.2×/0.4×/0.8×(以 seedance-2.5 720p 为 1×,实价以报价为准);单镜 2~30 秒(2 秒起计费,无 4 秒地板)',
       strengths: [
         '约 4 折成本,2~3 秒短镜更省',
@@ -690,6 +706,7 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'wan3.0-prime', name: 'WAN 3.0 Prime(高速版)',
+      measured_at: '2026-09-25',
       price: '480p/720p/1080p 约 0.3×/0.6×/1.2×(wan3.0 的 1.5 倍,以 seedance-2.5 720p 为 1×,实价以报价为准)',
       strengths: ['能力同 wan3.0,出片快约一倍(单镜约 1 分钟)'],
       weaknesses: ['同 wan3.0:写实人脸 720p+ 被拒、镜内自剪', '价格是 wan3.0 的 1.5 倍'],
@@ -698,6 +715,7 @@ export const MODEL_GUIDE = {
     },
     {
       id: 'kling-4.0', name: '可灵 4.0(内测·按剧开放)',
+      measured_at: '2026-10-29',
       price: '720p/1080p 约 0.66×/1×(以 seedance-2.5 720p 为 1×,报价 = 实扣已实测,实价以报价为准);无 480p(按 720p 计);单镜 3~30 秒',
       strengths: [
         '大场面动作强:坠击、爆裂一类镜的过程与终态完整(单次样本)',
@@ -732,6 +750,55 @@ export const MODEL_GUIDE = {
     { scenario: '画面文字多(招牌、屏幕、文件、字卡)', image_model: 'gpt-image-2.5-sunburst', video_engine: 'seedance-2.5', resolution: '720p', why: '中文字形更准;视频按剧的真人/风格化再按上面选(以 get_production_menu 当前可用为准)' },
     { scenario: '打斗、流血场面多的写实剧', image_model: 'gpt-image-2.5-flare', video_engine: 'seedance-2.5', resolution: '720p', why: '图被安全拒的镜平台自动换 Nano Banana 2;视频侧把血腥措辞改成中性描述(Seedance 文本审核严)。不要为了过审换 WAN——写实人脸会被拒(' + MODEL_AVAILABILITY_NOTE + ')' },
   ] as ModelCombo[],
+  override_entry_points: [
+    { scope: '一批首帧/尾帧(本集批量)', param: 'image_model', param_tools: ['quote_frames', 'generate_frames'], persists: false,
+      caveat: '只影响这一批,不改剧级设置;报价与出图必须传同一个,否则 400。`chain_frames` 的自动重构图(reframe)仍用剧级模型,不吃这个参数。' },
+    { scope: '单镜重画一张帧', param: 'image_model', param_tools: ['quote_shot_frame', 'generate_shot_frame'], persists: false,
+      caveat: '两次必须同值,否则 400 IMAGE_MODEL_MISMATCH;下次批量出图照旧用剧级模型。同一集混用模型会出现两种画风与画幅(Flare 竖屏 1088×1920、Nano Banana 2 竖屏 768×1376),只用在个别镜上。' },
+    { scope: '单镜中间关键帧', param: 'image_model', param_tools: ['quote_shot_keyframes', 'generate_shot_keyframes'], persists: false,
+      caveat: '报价与出图同值;建议与这一镜首尾帧用同一个模型,否则中段画风会跳。中间关键帧只对 seedance-2.5 / kling-4.0 且 ≥5 秒的镜开放。' },
+    { scope: '整集批量出视频里个别镜换引擎(只这一次)', param: 'shot_engines', param_tools: ['quote_videos'], then_tools: ['generate_videos'], persists: false,
+      caveat: '传 {分镜id: 引擎},只对这一次整集生成生效,不改剧级与镜头设置;引擎由 quote_id 钉死,要改就重新报价。含指定镜的场景组会**拆成逐镜出**(回执 shot_engines_ungrouped),组内其余镜失去一次成片的连贯——先看 `get_scene_group_plan`,别为一镜拆一个好好的组。引擎须支持本剧分辨率与本镜时长;指定的镜必须这次会出视频(已出过的给它指定 ⇒ 400,改用 quote_regenerate_shot_video 的 model)。' },
+    { scope: '单镜视频引擎(存为镜头设置)', param: 'video_engine', param_tools: ['update_shot'], persists: true,
+      caveat: '之后这一镜的批量出视频、单镜出视频、重生都按它,传 null 恢复跟随剧级。设了引擎的镜**不进场景组**,失去与相邻镜一次成片的连贯;须支持本剧分辨率与本镜时长,否则 400。' },
+    { scope: '单镜重出视频(只这一次)', param: 'model', param_tools: ['quote_regenerate_shot_video'], then_tools: ['regenerate_shot_video'], persists: false,
+      caveat: '引擎由 quote_id 钉死,`regenerate_shot_video` 不再收模型参数;不改镜头设置,下次出视频回到剧级或 update_shot 设的引擎。适合「同一镜换个引擎各出一版比一比」。' },
+    { scope: '整组重出(只这一次)', param: 'video_engine', param_tools: ['quote_regenerate_scene_group'], then_tools: ['regenerate_scene_group'], persists: false,
+      caveat: '整组仍一次成片,组总时长须在该引擎单段上限内(hailuo-3 15 秒;seedance-2.5 / wan3.0 30 秒)且支持本剧分辨率,否则 400——那时改用 update_shot 给个别镜设引擎。引擎由 quote_id 钉死。' },
+    { scope: '单镜就地编辑(改色调/局部)', param: 'model', param_tools: ['quote_edit_video_shot', 'edit_video_shot'], persists: false,
+      caveat: '报价与编辑同值;只有 seedance-2.5 支持 start_sec / end_sec 区间编辑;hailuo-3 保真度高且便宜,Seedance 剧也可单镜借它编辑;kling-4.0 编辑内测,未开放的剧 400。' },
+    { scope: '成片续写', param: 'model', param_tools: ['quote_extend_final', 'extend_final'], persists: false,
+      caveat: '报价与发起传同一个;续写要求本剧开放(引擎需 2.5 系),403 = 没开,别重试。' },
+  ] as ModelOverrideEntry[],
+  asset_routing: [
+    { asset: '定妆图 / 设定图(角色身份锚)', tools: ['generate_character_portraits', 'generate_character_sheets', 'generate_portraits_and_sheets', 'derive_character_portrait'], override_param: null,
+      model_source: '跟随剧级 image_model,没有按张换模型的入口',
+      advice: '身份锚一张有瑕疵会传染全集:剧级模型先定好再出定妆,出完别换剧级模型(换了要重出定妆,否则锚和镜头帧是两种画风)。Nano Banana 2 出这类图按 2K 档计(119 点/张)。' },
+    { asset: '场景基板 / 场景变体 / 光照参考', tools: ['generate_scene_images', 'generate_scene_variant_image', 'generate_scene_lighting_ref'], override_param: null,
+      model_source: '跟随剧级 image_model,没有按张换模型的入口',
+      advice: '空景基板是镜头帧的环境参考,与镜头帧同一模型最稳;想试别的画风应在建剧时整剧定,不要中途改。' },
+    { asset: '道具图 / 产品图', tools: ['generate_prop_sheet', 'generate_product_sheet'], override_param: null,
+      model_source: '跟随剧级 image_model,没有按张换模型的入口',
+      advice: '画面里要出现可读文字(包装、商标、说明)的产品片,建剧时整剧选 gpt-image-2.5-sunburst。' },
+    { asset: '镜头帧(首帧 / 尾帧)', tools: ['quote_frames', 'generate_frames', 'quote_shot_frame', 'generate_shot_frame'], override_param: 'image_model',
+      model_source: '默认跟随剧级 image_model;可整批或逐镜临时覆盖(见 override_entry_points)',
+      advice: '按 image_decision 选:默认 Flare;可读中文用 Sunburst;反复被安全拒或画风漂成动漫的镜换 Nano Banana 2;个别关键镜要最精细换 Pro。' },
+    { asset: '中间关键帧', tools: ['quote_shot_keyframes', 'generate_shot_keyframes'], override_param: 'image_model',
+      model_source: '默认跟随剧级 image_model,可临时覆盖',
+      advice: '与本镜首尾帧保持同一模型。' },
+    { asset: '封面 / 剧海报 / 分集海报', tools: ['generate_cover', 'generate_drama_poster', 'generate_episode_poster'], override_param: null,
+      model_source: '工具不收模型参数,不能单独指定',
+      advice: '别对客户承诺「封面用最贵的模型」;想要更精细只能整剧换模型。' },
+    { asset: '整集批量出视频', tools: ['quote_videos', 'generate_videos'], override_param: 'shot_engines',
+      model_source: '剧级 video_engine;优先级:quote_videos 的 shot_engines(只这一次)> `update_shot` 存的镜头设置 > 剧级',
+      advice: '出视频前就把引擎定好(video_decision ⑤);个别镜这一次换引擎用 shot_engines(含它的场景组会拆成逐镜出),要长期换用 update_shot(会退出场景组)。' },
+    { asset: '局部返修 / 视频转绘', tools: ['local_frame_edit', 'repaint_shot_video', 'reskin_shot_video'], override_param: null,
+      model_source: '工具不收模型参数,由平台选定(转绘能力见 `get_repaint_capabilities`)',
+      advice: '这几步不受 image_model / video_engine 选择影响,不需要也不能为它们换模型。' },
+  ] as AssetModelRoute[],
+  freshness:
+    '每张卡的 measured_at 是那批实测数字的取样日期(生产统计快照,厂商升级后不会自动更新)。转述给客户时带上日期(如「9 月底实测」);' +
+    '距今超过约 60 天的数字只当方向参考,不当保证。模型当前能不能用以 get_production_menu 的 availability 为准,价格以 quote_* 报价为准,都不以本段为准。',
 }
 
 /**
@@ -848,6 +915,10 @@ export function referencedTools(): string[] {
   for (const m of [...MODEL_GUIDE.image_models, ...MODEL_GUIDE.video_engines]) {
     [...m.strengths, ...m.weaknesses, m.best_for, m.avoid_for].forEach((s) => inProse(s).forEach(add))
   }
+  // 覆盖入口与资产路由:工具名是结构化字段,全部纳入;说明文字里反引号包住的也纳入
+  for (const e of MODEL_GUIDE.override_entry_points) { [...e.param_tools, ...(e.then_tools ?? [])].forEach(add); inProse(e.caveat).forEach(add) }
+  for (const a of MODEL_GUIDE.asset_routing) { a.tools.forEach(add); [a.model_source, a.advice].forEach((s) => inProse(s).forEach(add)) }
+  inProse(MODEL_GUIDE.freshness).forEach(add)
   // 动作片段:全是散文,工具名都用反引号包住
   ;[ACTION_FILM.when, ACTION_FILM.sequence, ...ACTION_FILM.setup, ...ACTION_FILM.shot_design, ...ACTION_FILM.continuity, ACTION_FILM.engines, ...ACTION_FILM.pacing, ACTION_FILM.cost_reference]
     .forEach((s) => inProse(s).forEach(add))
