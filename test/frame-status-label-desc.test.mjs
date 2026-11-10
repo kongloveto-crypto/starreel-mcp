@@ -26,7 +26,9 @@ test('generate_frames 与流程说明不再把 failed 直接叫「真失败」',
  const m=descs()
  for (const k of ['generate_frames','set_script','rewrite_script','extract_assets']) {
   const d=m.get(k)
-  assert.match(d,/frame_status_label/,k)
+  // 2026-11-10：产线总纲只留 set_script 一处，rewrite_script / extract_assets 改成指向它
+  if (k==='rewrite_script'||k==='extract_assets') assert.match(d,/产线总纲[^\n]*只写在 set_script 的描述里/,k)
+  else assert.match(d,/frame_status_label/,k)
   assert.doesNotMatch(d,/failed=才是真失败/,k)
  }
 })

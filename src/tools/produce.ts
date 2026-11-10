@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { StarReelClient } from '../client.js'
 import { assertSafeToolchainDir, TOOLCHAIN_FILENAMES } from '../path-guard.js'
+import { slimHeavy } from './slim.js'
 import { FREE_ASPECT_NOTE, MODEL_AVAILABILITY_NOTE } from './guide-data.js'
 
 const TOOLCHAIN_USAGE = [
@@ -46,6 +47,14 @@ export const HANDOFF_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..'
 function jsonResult(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
 }
+/** 任务类工具：默认回精简版（slim.ts），verbose=true 原样。verbose 只在 MCP 侧生效，不传给后端。 */
+function jobResult(data: unknown, verbose?: boolean) {
+  return jsonResult(verbose ? data : slimHeavy(data))
+}
+const VERBOSE_ARG = {
+  verbose: z.boolean().optional().describe('默认 false:省略任务行里的整段派发提示词、输入快照与参考素材清单(只留 *_chars / *_count),状态 / 错误 / 产物地址照回;true=原样全量'),
+}
+const VERBOSE_HINT = '★返回默认精简:任务行里的整段提示词与输入快照已省略(留字数),要全量传 verbose=true;核对某次派发到底送了什么,用 get_shot_prompts / get_image_dispatch。'
 
 // ★一键出片第二期(2026-10-16):「客户确认才跑 / 别替客户决定」的统一口径。执行模式(专业 / 一键 / 混合)由
 //   get_production_plan 的 autopilot 给出;工具描述是静态的,所以写成「按执行模式」。散落各工具的确认要求一律经
@@ -217,6 +226,13 @@ const SHOT_REGEN_ARG = {
     '只在收到 409 AUTOPILOT_SHOT_REGEN_LIMIT、并且**客户亲口同意**这一镜再重出后才带 true(再给一份上限);平时不传,不许替客户同意'),
 }
 
+/**
+ * 产线总纲 WORKFLOW_HINT 约 1.5 万字,此前原样拼进 set_script / rewrite_script / extract_assets 三个描述(共 4.6 万字,
+ * 占全部工具描述的两成多)。2026-11-10 起只留 set_script 一处,另两处换成这句指引——客户端一次加载全部工具时省 3 万字。
+ */
+export const WORKFLOW_POINTER =
+  '\n★产线总纲(执行模式:哪些步要问客户 / 产线顺序 / 五道审查闸 / 成片前自检)只写在 set_script 的描述里,不在这里重复;' +
+  '还没读过就先读它,或调 get_capabilities_guide。跳步的返工都是真扣费。'
 /** 执行模式总纲(一键出片第二期):WORKFLOW_HINT 开头,先定「问不问客户」再谈产线顺序。 */
 export const AUTOPILOT_HINT =
   '★★【执行模式总纲·开工先读】确认过开场方案的剧先 get_production_plan 读 autopilot:' +
@@ -639,7 +655,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '合回去、上一版正确的年代服装下一版漂走)。响应里的 overwrites_existing_script=true 就是这个意思。' +
       '所以**首次改写成功之后,后续所有修改一律用 edit_rewritten_script 点改**——免费、秒级、只动指定的' +
       '那几场,其余逐字不变,结果确定不抽卡;只有"要一个完全不同的版本"才重跑本工具。' +
-      '误重跑后用 get_script(include_previous=1) 取回上一版。' + WORKFLOW_HINT,
+      '误重跑后用 get_script(include_previous=1) 取回上一版。' + WORKFLOW_POINTER,
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.producePost(`/episodes/${episode_id}/rewrite`)),
   )
@@ -875,7 +891,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '从可拍稿提取角色/场景/道具(一次写三表,是下游一致性的地基)。后台异步,文本步后付不欠费。' +
       '前置:已 rewrite_script 产出改写稿(新项目强制;人物档案从改写稿提取才与剧本、分镜自洽)。' +
       '★分钟级后台任务;用 get_run_status 判断是否还在跑,别拿 60 秒当失败判据。' +
-      REVIEW_GATE_HINT('review_script', '改写稿') + WORKFLOW_HINT +
+      REVIEW_GATE_HINT('review_script', '改写稿') + WORKFLOW_POINTER +
       '\n★【完成后质检】提取完用 get_characters / get_scenes / get_props 核对档案(名字、外貌、时代)与客户剧本一致;' +
       '定妆图/设定图/场景图/道具图出完后由 review_assets 统一审覆盖与质量。' +
       '\n★【提取时自动出道具图·按张计费】剧级 auto_derive_assets 开着(默认)时,提取完平台会自动给有描述、还没有图的道具逐件出道具图,' +
@@ -1742,7 +1758,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       REVIEW_GATE_HINT('review_videos', '视频与配音') +
       '\n' + PRE_COMPOSE_CHECK_HINT +
       '\n★成片时长 ≠ 分镜合计:每道非硬切转场(叠化等)会把相邻两镜重叠掉转场时长(7 道 300ms 叠化 ≈ 少 2.1s)。回执的 declared_total_s 是分镜合计,不是成片时长;' +
-      '成片实测时长、差值与来源看 get_final_cut / review_final_cut 的 duration_check。要成片时长等于分镜合计就用硬切(default_transition=cut)。' +
+      '成片实测时长、差值与来源看 get_final_cut / review_final_cut 的 duration_check。要成片时长等于分镜合计就用硬切(default_transition=cut)。返回的 transition 字段给出本集最多几处切点叠转场、合计最多短多少秒,转场不是硬切时把这个数告诉客户。' +
       '\n★分辨率:成片画布按剧的画幅定(如 16:9 = 1920x1080),镜头源分辨率由所选视频模型 / resolution 决定(如 720p = 1280x720);源低于画布时成片是**放大**出来的、不增加实际清晰度——get_final_cut 的 resolution 会写明。' +
       '\n★【完成后质检·免费】成片出来后跑 review_final_cut(缺镜/字幕放不下/身份锚/跳轴/错别字,proofread=false 则不扣费),' +
       '结论讲给客户;客户确认后才 confirm_delivery_acceptance' + ALWAYS_ASK('交付验收') + '。force 只越过终拼预检,不越过审查闸。',
@@ -2800,7 +2816,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '再重新 quote 并编辑;**别连发**多条编辑想让它们叠加,每一条都只基于当时的源。' +
       '若在途那条正是你刚提交的同一次编辑(例如调用超时后重发),直接等它的结果,不必再发。' +
       '同一次编辑原样重发(指令、参考素材、区间、引擎都一样)不会 409,会挂到在途那条上、不重复扣费。' +
-      SHOT_REGEN_HINT('重出视频最多 3 次(与 regenerate_shot_video 合计)') + CONFIRM_HINT + VIDEO_QC_HINT,
+      SHOT_REGEN_HINT('重出视频最多 3 次(与 regenerate_shot_video 合计)') + CONFIRM_HINT + VIDEO_QC_HINT + VERBOSE_HINT,
     {
       storyboard_id: z.number().int().positive(),
       quote_id: z.string().describe('来自 quote_edit_video_shot'),
@@ -2815,9 +2831,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
         '本镜是实拍素材镜(upload_shot_footage 传过)时,显式允许以它为源做编辑并用 AI 产物覆盖它。' +
         '不传则被守卫拒(409,带中文出路)。想保留素材就别传,改用 clear_shot_footage 换回 AI 生成。'),
       ...SHOT_REGEN_ARG,
+      ...VERBOSE_ARG,
     },
-    async ({ storyboard_id, ...rest }) =>
-      jsonResult(await client.producePost(`/storyboards/${storyboard_id}/edit/generate`, rest)),
+    async ({ storyboard_id, verbose, ...rest }) =>
+      jobResult(await client.producePost(`/storyboards/${storyboard_id}/edit/generate`, rest), verbose),
   )
   // ========== B2 · VACE 视频重绘 / 换装重绘(保留原片动作,重画人物与服装) ==========
   const VACE_COMMON =
@@ -2851,7 +2868,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '\n★keep_scene 缺省 true:把本镜场景/道具/动作补进描述,只换人与衣服;传 false = 连场景一起重画。' +
       '\n★control:posebodyface(缺省,保口型,说话镜用它)/ posebody(不带脸,嘴不动)/ depth(按景深,纯色背景易出竖条纹)/ scribble(线稿)。' +
       'strength 只收 0 或 1。' +
-      '\n★本镜绑了产品文字(需保留商品原文)时会被拒(重绘会重画画面里的字)。' + VACE_COMMON + CONFIRM_HINT,
+      '\n★本镜绑了产品文字(需保留商品原文)时会被拒(重绘会重画画面里的字)。' + VACE_COMMON + CONFIRM_HINT + VERBOSE_HINT,
     {
       storyboard_id: z.number().int().positive(),
       quote_id: z.string().describe('来自 quote_repaint_shot_video'),
@@ -2861,9 +2878,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       reference_image_url: z.string().optional().describe('主体参考图 URL(先 upload_image 拿);缺省自动取本镜角色定妆图'),
       auto_reference: z.boolean().optional().describe('false = 明确不带参考图(人会按描述重画)'),
       keep_scene: z.boolean().optional().describe('缺省 true:保留原片场景与道具,只换人和衣服'),
+      ...VERBOSE_ARG,
     },
-    async ({ storyboard_id, ...rest }) =>
-      jsonResult(await client.producePost(`/storyboards/${storyboard_id}/repaint/generate`, rest)),
+    async ({ storyboard_id, verbose, ...rest }) =>
+      jobResult(await client.producePost(`/storyboards/${storyboard_id}/repaint/generate`, rest), verbose),
   )
   server.tool(
     'quote_reskin_shot_video',
@@ -2878,16 +2896,17 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '\n★first_frame_url 是**换好装的首帧**:必须与原片首帧**构图、人物姿势、道具位置逐一对齐**(只换衣服),' +
       '否则整段会跑偏——实测失败都出在首帧。完成后它会成为本镜正式首帧。只收公网 https 图片(先 upload_image 拿)。' +
       '\n★prompt 可留空(系统看首帧自动写);写的话别用「制服/军装」这类服装类别词,模型会自行加肩章条纹,直接描述颜色款式。' +
-      '\n★control:posebodyface(缺省,保口型)/ depth。本镜绑了产品文字时会被拒。' + VACE_COMMON + CONFIRM_HINT,
+      '\n★control:posebodyface(缺省,保口型)/ depth。本镜绑了产品文字时会被拒。' + VACE_COMMON + CONFIRM_HINT + VERBOSE_HINT,
     {
       storyboard_id: z.number().int().positive(),
       quote_id: z.string().describe('来自 quote_reskin_shot_video'),
       first_frame_url: z.string().describe('换好装的首帧 https URL,须与原片首帧构图对齐'),
       prompt: z.string().optional().describe('可留空:系统看首帧自动写'),
       control: z.enum(['posebodyface', 'depth']).optional().describe('缺省 posebodyface'),
+      ...VERBOSE_ARG,
     },
-    async ({ storyboard_id, ...rest }) =>
-      jsonResult(await client.producePost(`/storyboards/${storyboard_id}/reskin/generate`, rest)),
+    async ({ storyboard_id, verbose, ...rest }) =>
+      jobResult(await client.producePost(`/storyboards/${storyboard_id}/reskin/generate`, rest), verbose),
   )
   server.tool(
     'get_repaint_status',
@@ -2896,13 +2915,14 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '\n· status=completed:本镜视频已换成转绘结果(video_url / local_path);接力完成时带 relay.final_generation_id——' +
       '**切回原片要用这个 final_generation_id**,不是段 1 的 id。' +
       '\n· status=completed 但 errorMsg 含「未写回」:任务期间本镜视频被换掉,结果存档在这条记录里、没覆盖本镜。' +
-      '\n· status=failed:errorMsg 是中文原因(接力会说明第几段失败),镜头未改动,已扣的按规则退。',
+      '\n· status=failed:errorMsg 是中文原因(接力会说明第几段失败),镜头未改动,已扣的按规则退。' + VERBOSE_HINT,
     {
       storyboard_id: z.number().int().positive(),
       generation_id: z.number().int().positive().describe('repaint_shot_video / reskin_shot_video 返回的 id'),
+      ...VERBOSE_ARG,
     },
-    async ({ storyboard_id, generation_id }) =>
-      jsonResult(await client.produceGet(`/storyboards/${storyboard_id}/vace/${generation_id}`)),
+    async ({ storyboard_id, generation_id, verbose }) =>
+      jobResult(await client.produceGet(`/storyboards/${storyboard_id}/vace/${generation_id}`), verbose),
   )
   server.tool(
     'restore_repaint_original',
@@ -2948,7 +2968,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '先等在途那条完成、看过结果,再重新 quote 并重生——否则拿到的视频是旧内容(旧提示词或旧首尾帧)出的,会误以为改动没效果。' +
       '\n★成功但返回里带 **`reused_in_flight: true`** = 同样的内容已经在生成(重发/双击/批量出视频已派发),' +
       '这次没有新建、没有新扣费,返回的就是在途那一条,看它的进度即可,不必再发。' +
-      SHOT_REGEN_HINT('重出视频最多 3 次(与 edit_video_shot 合计)') + REVIEW_GATE_HINT('review_frames', '镜头图片') + CONFIRM_HINT + VIDEO_QC_HINT,
+      SHOT_REGEN_HINT('重出视频最多 3 次(与 edit_video_shot 合计)') + REVIEW_GATE_HINT('review_frames', '镜头图片') + CONFIRM_HINT + VIDEO_QC_HINT + VERBOSE_HINT,
     {
       storyboard_id: z.number().int().positive(),
       quote_id: z.string().describe('来自 quote_regenerate_shot_video'),
@@ -2957,9 +2977,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       replace_user_footage: z.boolean().optional().describe(
         '本镜是实拍素材镜时,显式允许用 AI 重生的视频覆盖它(不传则被守卫拒 409)。'),
       ...SHOT_REGEN_ARG,
+      ...VERBOSE_ARG,
     },
-    async ({ storyboard_id, quote_id, review_token, acknowledge_review, auto_acknowledge, prompt, replace_user_footage, customer_approved_more_regens }) =>
-      jsonResult(await client.producePost(`/storyboards/${storyboard_id}/regen/generate`, {
+    async ({ storyboard_id, quote_id, review_token, acknowledge_review, auto_acknowledge, prompt, replace_user_footage, customer_approved_more_regens, verbose }) =>
+      jobResult(await client.producePost(`/storyboards/${storyboard_id}/regen/generate`, {
         quote_id,
         review_token,
         acknowledge_review,
@@ -2967,7 +2988,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
         customer_approved_more_regens,
         ...(prompt ? { prompt } : {}),
         ...(replace_user_footage !== undefined ? { replace_user_footage } : {}),
-      })),
+      }), verbose),
   )
   server.tool(
     'split_shot',
@@ -3995,9 +4016,9 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★整集出帧(generate_frames)是后台逐镜派发,被拒的镜不会出现在任务列表里——看响应的 frame_dispatch_rejections' +
       '(每镜 storyboard_id/frame_type/code/message)。code=ERA_USER_REF_CONFLICT 表示客户上传的定妆图被时代审核判冲突:' +
       '把 message 转告客户' + ALWAYS_ASK('allow_era_ref_conflict ') + ',客户确认后带 allow_era_ref_conflict=true 对那几镜 generate_shot_frame。重启后该列表清空。' +
-      '★image_batches = 最近 24 小时的批量出图批次(含 cancel_images 取消的,status=cancelled)。',
-    { drama_id: z.number().int().positive() },
-    async ({ drama_id }) => jsonResult(await client.produceGet(`/dramas/${drama_id}/jobs`)),
+      '★image_batches = 最近 24 小时的批量出图批次(含 cancel_images 取消的,status=cancelled)。' + VERBOSE_HINT,
+    { drama_id: z.number().int().positive(), ...VERBOSE_ARG },
+    async ({ drama_id, verbose }) => jobResult(await client.produceGet(`/dramas/${drama_id}/jobs`), verbose),
   )
   server.tool(
     'get_drama_bill',
@@ -4045,6 +4066,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '某档 available=false 表示该档模型当前都不可用(unavailable_reason 说明),别推荐它。' +
       'estimate=null 表示价格服务暂时取不到实时单价——如实告诉客户「暂时估不出」,别自己编数字。' +
       'estimate 已含文本步(剧本改写、拆镜、分镜补全,按每镜约 360 点估,breakdown 的 text 项)。' +
+      '走火山视频引擎(Seedance)的组合还含首次人像核验费(breakdown 的 kyc 项 = 角色数 × 单价,每个出镜角色只收一次,不乘 1.2;角色数按 assets.characters 估,知道就传)。' +
       'not_included 列出不在预估里的花费(配音配乐、质检重出与审核拒绝后的重出),一并讲给客户;质检重出不进上界,由「自动追加」额度兜底。' +
       '★建议预算:每档 recommended_budget = (该档 estimate.total.upper − breakdown 的 text 项) × 1.2 + text 项(文本不放大);菜单的 recommended_overrun_pct=30 是建议的追加档位。' +
       '向客户**默认建议**「预算 = recommended_budget、追加 30%」(budget_advice 是现成的说法),说明这只是建议,预算与追加比例由客户决定(追加可选 0/10/20/30/50)。' +
@@ -4843,13 +4865,14 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '让上一镜真实收在本镜的开场画面上。扣一条视频,必须带 quote_align_prev_shot 的 quote_id。' +
       '★适用:客户换过本镜首帧(比如上传或重生了一张更满意的),而上一镜的视频已经出好、不想改本镜首帧去迁就它。' +
       '两镜都还没出视频时别用它——改首帧(chain_shot_from_prev / chain_shot_from)更便宜。' +
-      '异步:轮询 get_storyboards 看上一镜 video_status。',
+      '异步:轮询 get_storyboards 看上一镜 video_status。' + VERBOSE_HINT,
     {
       storyboard_id: z.number().int().positive().describe('缝右侧那一镜'),
       quote_id: z.string().describe('来自 quote_align_prev_shot'),
+      ...VERBOSE_ARG,
     },
-    async ({ storyboard_id, quote_id }) =>
-      jsonResult(await client.producePost(`/storyboards/${storyboard_id}/align-prev`, { quote_id })),
+    async ({ storyboard_id, quote_id, verbose }) =>
+      jobResult(await client.producePost(`/storyboards/${storyboard_id}/align-prev`, { quote_id }), verbose),
   )
   server.tool(
     'get_scene_group_plan',
