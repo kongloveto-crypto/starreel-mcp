@@ -733,7 +733,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '也认客户已有的加粗写法 `**镜 001 ｜ 4″ ｜ 微距 ｜ 摄影机固定不动**`(不必让客户重打一遍)。' +
       '顺序 = 镜号|秒数|景别|运镜|标记;标记 `不切` 表示该镜绝不可再拆、`★` 表示关键镜;' +
       '运镜的「横移」映射 tracking、「摇」映射 pan(两者在反光面上的倒影行为不同,别混)。' +
-      '`[字卡 9s] 行一 | 行二` 会建成卡镜(成片层直接渲黑底卡,不出图不出视频)。' +
+      '`[字卡 9s] 行一 | 行二` 会建成卡镜(成片层直接渲黑底卡,不出图不出视频;字号偏小用 set_card_shot_style 调档位)。' +
       '★道具:`[道具] 名A、名B` 行按**本剧道具库里的道具名**绑定 prop_ids,正文里完整出现的道具名也自动绑;回执 prop_names_unresolved 列出没绑上的名字(先建道具再导,或改名)。' +
       '★机位/站位/朝向/衔接(可选,原稿写了就照抄,没写别编):声明里加一段机位(侧拍/俯拍/仰拍/鸟瞰/过肩/反打/主观,如 `[镜 004 | 4s | 近景 | 固定 | 侧拍俯角]`)→ angle;' +
       '声明里加「接」(紧接上镜)或「切」(硬切)一段 → continuity_intent,来源记 author、压过系统推断;' +
@@ -3755,6 +3755,24 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '也适合直接把要点转述给客户看。',
     {},
     async () => jsonResult(await client.produceGet('/bgm-prompt-guide')),
+  )
+  server.tool(
+    'set_card_shot_style',
+    '调黑底字卡镜(导入 `[字卡 Ns]` 建出的、出视频显示 not_required 的那种整屏黑底字卡)的**字号档位**。免费(纯数据)。' +
+      'font_size 四档:small / medium(默认,等于不设) / large / xlarge——按成片画布短边成比例换算(标准画幅短边 1080 → 48 / 64 / 88 / 112 px),' +
+      '字越大每行字越少、自动折行,不会顶出画面。★竖屏(9:16)手机上默认档偏小,片名 / 结语这类短句建议 large,只有两三个字的大标题用 xlarge;' +
+      '一行很长的整句用 large 会折成多行,先看返回的 chars_per_line 再定。' +
+      '不传 font_size = 只读现值(返回 text / duration_ms / font_size / font_px / chars_per_line / canvas);font_size=null 恢复默认。' +
+      '只能调已有字卡镜的字号:不建卡、不改正文(正文在导入的分镜表里写);普通镜调用返回 400——画面上叠字的字卡用 set_shot_verse_cards / set_shot_name_card。' +
+      '改完调 compose_episode 重新终拼生效(rerender_episode 沿用已存时间轴,带不上)。★别下载成片在本地另做字卡再拼回去——那会绕开渲染机字体与终拼链路。',
+    {
+      storyboard_id: z.number().int().positive().describe('字卡镜 ID(get_storyboards 里 video 状态为 not_required 的卡镜)'),
+      font_size: z.enum(['small', 'medium', 'large', 'xlarge']).nullable().optional()
+        .describe('字号档位;不传=只读现值,null=恢复默认(medium)'),
+    },
+    async ({ storyboard_id, font_size }) =>
+      jsonResult(await client.producePut(`/storyboards/${storyboard_id}/narration-card`,
+        font_size !== undefined ? { font_size } : {})),
   )
   server.tool(
     'set_shot_name_card',

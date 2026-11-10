@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.334",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.334 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.335",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.335 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -12088,7 +12088,7 @@
       "post": {
         "operationId": "import_storyboard_table",
         "summary": "【已有分镜表时用这个】把客户**做完的分镜表**直接建成分镜，跳过改写与拆镜——中间没有任何 agent",
-        "description": "【已有分镜表时用这个】把客户**做完的分镜表**直接建成分镜，跳过改写与拆镜——中间没有任何 agent。免费。★三步走，别直接导：① get_storyboard_table_spec 取范本（景别/运镜白名单、正文落点、字卡语法、外部 AI 提示词）；② check_storyboard_table 自检到 errors 清零、逐条看 warnings（缺秒数/景别没认出/没画面叙述都会原样建进去）；③ 再调本工具。★什么时候用:客户交来的不是剧本而是成品分镜表(逐镜写了秒数/景别/运镜,常见于给电视台/品牌方的样片)。走 set_script→rewrite_script→generate_storyboards 那条路会把这些制作参数当非剧情内容剥掉(生产实测:8 镜 36 秒的表跑完变成 20 镜 109 秒,STYLE 块与数据卡全丢),所以这类客户必须走本工具。★声明格式(每镜一行,字段用 | 或全角 ｜ 分隔):`[镜 001 | 4s | 微距 | 固定]`,也认客户已有的加粗写法 `**镜 001 ｜ 4″ ｜ 微距 ｜ 摄影机固定不动**`(不必让客户重打一遍)。顺序 = 镜号|秒数|景别|运镜|标记;标记 `不切` 表示该镜绝不可再拆、`★` 表示关键镜;运镜的「横移」映射 tracking、「摇」映射 pan(两者在反光面上的倒影行为不同,别混)。`[字卡 9s] 行一 | 行二` 会建成卡镜(成片层直接渲黑底卡,不出图不出视频)。★道具:`[道具] 名A、名B` 行按**本剧道具库里的道具名**绑定 prop_ids,正文里完整出现的道具名也自动绑;回执 prop_names_unresolved 列出没绑上的名字(先建道具再导,或改名)。★机位/站位/朝向/衔接(可选,原稿写了就照抄,没写别编):声明里加一段机位(侧拍/俯拍/仰拍/鸟瞰/过肩/反打/主观,如 `[镜 004 | 4s | 近景 | 固定 | 侧拍俯角]`)→ angle;声明里加「接」(紧接上镜)或「切」(硬切)一段 → continuity_intent,来源记 author、压过系统推断;正文 `[站位] 角色名 画左 面朝右;角色名 画右 面朝左` → character_positions / facing_directions(只给绑到本镜画面的角色落值;同场没写的镜由系统按已写朝向补齐)。不写这些的话 angle 为空、站位朝向只能靠推断,同场人物左右与机位容易镜镜乱跳。回执 camera_angle_shots(落了机位的镜号)、blocking{shots, unresolved:[{shot_number,name,reason}]}(reason: no_character_name=行里没有本剧角色名 / not_in_shot=该角色没绑到本镜 / no_direction=没认出方位词)、continuity_intent_marks(作者标记,首镜的 applied=false)。★不传 content 时读本集「原始内容」。没有任何逐镜声明会被 400 拒(那是剧本不是分镜表,请走正常拆镜)。★本集已有分镜时返回 409 并告知镜数,确认要替换再带 confirm_replace:true(旧镜转已删除状态、可恢复)。秒数/景别缺失的镜照常导入但会在 issues 里列出——系统不替客户猜,猜错一个秒数就是成片时长错。★★先核绑定、再补全:autofill 跑完之后再重导,补全结果作废、要重新付费。拿不准角色/道具/场景能不能按名字绑上时,传 auto_complete:false 导入 → 对照**客户原稿**逐镜核对 get_storyboards 的 character_ids / scene_id / prop_ids(回执 props_possibly_unbound 列出画面里像有物件、却一个道具都没绑的镜) → 用 update_shot 补绑 → 确认无误再 quote_autofill / autofill_storyboards。导入后才发现漏绑也用 update_shot 补(prop_ids / character_ids),**不要整集重导**。★导入后**默认自动补全**(auto_complete,跟随剧目「自动补齐辅助资产」开关、默认开):同一后台批次给全镜 AI 填空专业字段(镜头意图/节拍/潜台词/J-L cut/声线等,只填空)并把每镜由平台拼的基础描述扩写成完整出图/视频提示词——客户导完即可出图。文本步按 token 后付,**调用前告知客户**;只想导入不补传 auto_complete:false(**代价:不会生成构图契约**——可见人数、主体是人物/局部/道具、景别都只能靠文字推断,手部插入镜和画外配音镜容易被当完整人物出图和审核;回执 contract_coverage 列出缺几镜**并给出当前可行的补法,以它的 note 为准**——契约自动补全开着时是调 autofill_storyboards)。回执 auto_complete.started=true 后用 get_autofill_status 轮询到 done(每镜数十秒)**再** review_storyboards——补全会改镜,先审查的 token 会失效。",
+        "description": "【已有分镜表时用这个】把客户**做完的分镜表**直接建成分镜，跳过改写与拆镜——中间没有任何 agent。免费。★三步走，别直接导：① get_storyboard_table_spec 取范本（景别/运镜白名单、正文落点、字卡语法、外部 AI 提示词）；② check_storyboard_table 自检到 errors 清零、逐条看 warnings（缺秒数/景别没认出/没画面叙述都会原样建进去）；③ 再调本工具。★什么时候用:客户交来的不是剧本而是成品分镜表(逐镜写了秒数/景别/运镜,常见于给电视台/品牌方的样片)。走 set_script→rewrite_script→generate_storyboards 那条路会把这些制作参数当非剧情内容剥掉(生产实测:8 镜 36 秒的表跑完变成 20 镜 109 秒,STYLE 块与数据卡全丢),所以这类客户必须走本工具。★声明格式(每镜一行,字段用 | 或全角 ｜ 分隔):`[镜 001 | 4s | 微距 | 固定]`,也认客户已有的加粗写法 `**镜 001 ｜ 4″ ｜ 微距 ｜ 摄影机固定不动**`(不必让客户重打一遍)。顺序 = 镜号|秒数|景别|运镜|标记;标记 `不切` 表示该镜绝不可再拆、`★` 表示关键镜;运镜的「横移」映射 tracking、「摇」映射 pan(两者在反光面上的倒影行为不同,别混)。`[字卡 9s] 行一 | 行二` 会建成卡镜(成片层直接渲黑底卡,不出图不出视频;字号偏小用 set_card_shot_style 调档位)。★道具:`[道具] 名A、名B` 行按**本剧道具库里的道具名**绑定 prop_ids,正文里完整出现的道具名也自动绑;回执 prop_names_unresolved 列出没绑上的名字(先建道具再导,或改名)。★机位/站位/朝向/衔接(可选,原稿写了就照抄,没写别编):声明里加一段机位(侧拍/俯拍/仰拍/鸟瞰/过肩/反打/主观,如 `[镜 004 | 4s | 近景 | 固定 | 侧拍俯角]`)→ angle;声明里加「接」(紧接上镜)或「切」(硬切)一段 → continuity_intent,来源记 author、压过系统推断;正文 `[站位] 角色名 画左 面朝右;角色名 画右 面朝左` → character_positions / facing_directions(只给绑到本镜画面的角色落值;同场没写的镜由系统按已写朝向补齐)。不写这些的话 angle 为空、站位朝向只能靠推断,同场人物左右与机位容易镜镜乱跳。回执 camera_angle_shots(落了机位的镜号)、blocking{shots, unresolved:[{shot_number,name,reason}]}(reason: no_character_name=行里没有本剧角色名 / not_in_shot=该角色没绑到本镜 / no_direction=没认出方位词)、continuity_intent_marks(作者标记,首镜的 applied=false)。★不传 content 时读本集「原始内容」。没有任何逐镜声明会被 400 拒(那是剧本不是分镜表,请走正常拆镜)。★本集已有分镜时返回 409 并告知镜数,确认要替换再带 confirm_replace:true(旧镜转已删除状态、可恢复)。秒数/景别缺失的镜照常导入但会在 issues 里列出——系统不替客户猜,猜错一个秒数就是成片时长错。★★先核绑定、再补全:autofill 跑完之后再重导,补全结果作废、要重新付费。拿不准角色/道具/场景能不能按名字绑上时,传 auto_complete:false 导入 → 对照**客户原稿**逐镜核对 get_storyboards 的 character_ids / scene_id / prop_ids(回执 props_possibly_unbound 列出画面里像有物件、却一个道具都没绑的镜) → 用 update_shot 补绑 → 确认无误再 quote_autofill / autofill_storyboards。导入后才发现漏绑也用 update_shot 补(prop_ids / character_ids),**不要整集重导**。★导入后**默认自动补全**(auto_complete,跟随剧目「自动补齐辅助资产」开关、默认开):同一后台批次给全镜 AI 填空专业字段(镜头意图/节拍/潜台词/J-L cut/声线等,只填空)并把每镜由平台拼的基础描述扩写成完整出图/视频提示词——客户导完即可出图。文本步按 token 后付,**调用前告知客户**;只想导入不补传 auto_complete:false(**代价:不会生成构图契约**——可见人数、主体是人物/局部/道具、景别都只能靠文字推断,手部插入镜和画外配音镜容易被当完整人物出图和审核;回执 contract_coverage 列出缺几镜**并给出当前可行的补法,以它的 note 为准**——契约自动补全开着时是调 autofill_storyboards)。回执 auto_complete.started=true 后用 get_autofill_status 轮询到 done(每镜数十秒)**再** review_storyboards——补全会改镜,先审查的 token 会失效。",
         "tags": [
           "episodes"
         ],
@@ -18023,6 +18023,82 @@
                 "required": [
                   "name"
                 ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/storyboards/{storyboard_id}/narration-card": {
+      "put": {
+        "operationId": "set_card_shot_style",
+        "summary": "调黑底字卡镜(导入 `[字卡 Ns]` 建出的、出视频显示 not_required 的那种整屏黑底字卡)的**字号档位**",
+        "description": "调黑底字卡镜(导入 `[字卡 Ns]` 建出的、出视频显示 not_required 的那种整屏黑底字卡)的**字号档位**。免费(纯数据)。font_size 四档:small / medium(默认,等于不设) / large / xlarge——按成片画布短边成比例换算(标准画幅短边 1080 → 48 / 64 / 88 / 112 px),字越大每行字越少、自动折行,不会顶出画面。★竖屏(9:16)手机上默认档偏小,片名 / 结语这类短句建议 large,只有两三个字的大标题用 xlarge;一行很长的整句用 large 会折成多行,先看返回的 chars_per_line 再定。不传 font_size = 只读现值(返回 text / duration_ms / font_size / font_px / chars_per_line / canvas);font_size=null 恢复默认。只能调已有字卡镜的字号:不建卡、不改正文(正文在导入的分镜表里写);普通镜调用返回 400——画面上叠字的字卡用 set_shot_verse_cards / set_shot_name_card。改完调 compose_episode 重新终拼生效(rerender_episode 沿用已存时间轴,带不上)。★别下载成片在本地另做字卡再拼回去——那会绕开渲染机字体与终拼链路。",
+        "tags": [
+          "storyboards"
+        ],
+        "parameters": [
+          {
+            "name": "storyboard_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "字卡镜 ID(get_storyboards 里 video 状态为 not_required 的卡镜)"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "font_size": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "small",
+                          "medium",
+                          "large",
+                          "xlarge"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
               }
             }
           }
