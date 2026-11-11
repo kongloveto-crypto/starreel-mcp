@@ -1261,7 +1261,10 @@ shot whose voice drifted despite the anchor. Check them in this order:
    Choose the target voice with `set_voice_unify_target` (the shot whose voice
    is right) rather than an IP voice anchor: the target is read only by voice
    unification, so generation keeps locking first/last frames.
-   Recompose (`rerender_episode`) for `applied` shots to reach the final cut.
+   Recompose with `compose_episode` for `applied` shots to reach the final cut —
+   not `rerender_episode`: it may reuse the old timeline (old audio), and even
+   when it picks up the new audio the shot's subtitles fall back to a
+   character-count estimate. `compose_episode` re-aligns subtitles to the new voice.
 
 ### "话没说完就切" / a line gets cut off mid-word
 
@@ -1314,6 +1317,11 @@ refunded. Those shots show up as `verify_rejected` in the status (or as an
 error from `replace_shot_dialogue`) — re-voicing can't fix them; regenerate the
 shot instead.
 Either way, `compose_episode` afterwards — the final cut still holds the old audio until you do.
+Use `compose_episode`, not `rerender_episode`: re-voicing clears the shot's word timings,
+and `rerender_episode` may reuse the old timeline (old audio) and never re-aligns
+subtitles, so they fall back to a character-count estimate that drifts from the new
+voice. The same holds after `revoice_narration`, `unify_voices` and `restore_original_audio`
+(which removes any of these replacements and puts the vendor's original audio back, free).
 
 **Narration / voice-over is a separate track — use `revoice_narration`, not
 `replace_shot_dialogue`.** On clip-audio projects the narration is mixed into the
@@ -1754,6 +1762,14 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   — narration-card shots ignore footage and the upload is rejected (`narration_card_no_footage`).
 - **Finish**: `compose_episode`, `get_final_cut`, `get_export`,
   `generate_episode_poster`, `generate_cover`
+- **Join several episodes of one drama into a single film**: `concat_episodes` (free; `drama_id` +
+  `episode_ids` in playback order, 2–12) → poll `get_episode_concat` until `completed` → `download_url`.
+  Every episode must already have a fresh final cut (`compose_episode` done, not stale) — a 400 lists
+  the blocking episodes in `blocked`; `dry_run=true` validates only. Output takes the **first**
+  episode's resolution / frame rate; other aspect ratios are letterboxed (`pieces[].padded`), seams are
+  hard cuts, per-episode loudness is matched. Burned-in subtitles / end cards / BGM of each episode
+  are kept as is. It never replaces any episode's own cut. 403 = not enabled for this drama. Don't
+  download the cuts and join them locally.
 - **Final-cut length and resolution**: every non-hard-cut transition overlaps two shots, so the
   final cut is shorter than the storyboard total (`declared_total_s`). `get_final_cut` /
   `review_final_cut` return `duration_check` (measured `actual_duration_s`, `delta_s`, `causes`,

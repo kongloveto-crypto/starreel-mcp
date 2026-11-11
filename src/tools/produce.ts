@@ -2254,6 +2254,43 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       jsonResult(await client.producePost(`/episodes/${episode_id}/extend-final/${session_id}/apply`, {})),
   )
   server.tool(
+    'concat_episodes',
+    '把**同一部剧**里几集已经终拼好的成片,按你给的顺序首尾相接拼成一条(免费:不调厂商、不扣点、不重建时间轴)。'
+      + '后台跑,立即返回 concat_id,用 get_episode_concat 轮询到 completed 取 download_url。'
+      + '\n★什么时候用:一条片子为了分段制作拆成了几集(每集各自 compose_episode),最后要一条完整成片时——'
+      + '别让客户下载到本地自己拼,那会绕开平台的规格统一与响度对齐。'
+      + '\n★前置条件(不满足回 400,blocked 里逐集写明原因):每一集都必须属于这部剧;每一集都已 compose_episode 且成片就绪'
+      + '(get_final_cut 的 status=completed);成片不能是过期的(该集的镜头或配乐在成片之后改过 → 先对那一集重新 compose_episode)。'
+      + '合集总时长上限 30 分钟(超了回 400,分批拼)。先带 dry_run=true 调一次可只做校验、不发起。'
+      + '\n★拼出来是什么样:分辨率与帧率统一到 episode_ids 里**第一集**的成片;画幅不同的集等比缩放后补黑边(不裁切),'
+      + '回执 pieces[].padded / warnings 会标出;接缝是硬切;各集整体响度向第一集对齐,接缝处音量不会突然变大变小。'
+      + '每一集成片里**已经烧进去**的字幕、角标、片头片尾卡、配乐原样保留——不想让中间几集的片尾卡出现在合集里,'
+      + '先在那几集关掉片尾卡并重新 compose_episode,再来拼;配乐在接缝处是硬切。'
+      + '\n★产物挂在剧上,**不覆盖**任何一集自己的成片;同一部剧同一时间只能有一条在跑(再发回 409,带回在跑那条的 concat_id)。'
+      + '\n★403 = 这部剧尚未开通本能力(不是调用姿势错了),别重试,告诉客户联系平台开通。只能拼同一部剧的集,跨剧暂不支持。',
+    {
+      drama_id: z.number().int().positive(),
+      episode_ids: z.array(z.number().int().positive()).min(2).max(12)
+        .describe('要拼的集 ID,**按拼接顺序**排列(2~12 集,不能重复;顺序不必等于集号)'),
+      dry_run: z.boolean().optional().describe('true = 只校验每集成片是否可用并返回将用哪条成片,不发起拼接'),
+    },
+    async ({ drama_id, ...body }) =>
+      jsonResult(await client.producePost(`/dramas/${drama_id}/episode-concat`, body)),
+  )
+  server.tool(
+    'get_episode_concat',
+    '查这部剧的多集成片顺拼(concat_episodes)进度与产物。免费。'
+      + 'concats 按发起时间倒序,每条回 status(pending/processing/completed/failed)、episode_ids、'
+      + 'download_url(completed 才有,可直接下载)、duration_sec、spec(成片分辨率与帧率)、'
+      + 'pieces(每一集在合集里的起点 start_sec = 接缝位置、时长、是否被缩放 rescaled / 补黑边 padded / 换帧率 fps_converted、响度增益 gain_db)、'
+      + 'warnings、error_msg。'
+      + '\n★source_changed=true:其中某一集在这次拼接之后又重新终拼过,这条合集是旧的——需要新版就重新 concat_episodes。'
+      + '\n★status=failed 且 error_msg 提到「重启打断」:平台维护打断了拼接,直接重新发起即可(免费)。'
+      + 'enabled=false 表示这部剧尚未开通本能力。',
+    { drama_id: z.number().int().positive() },
+    async ({ drama_id }) => jsonResult(await client.produceGet(`/dramas/${drama_id}/episode-concat`)),
+  )
+  server.tool(
     'export_sheet_compare',
     '导出**设定图对照版**(角色设定图与成片画面的对照拼版,营销/交付用)。触发后台合成,用 get_sheet_compare 轮询。'
       + '\n★这个能力**默认关**:它是剧集级开关(不是所有片子都允许这样对外输出),'
@@ -3151,7 +3188,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '执行事后声线统一（必须先 quote_voice_unify，客户同意后带 quote_id）。只跑报价里的镜，后台串行（每镜约 1~2 分钟）。' +
       '每镜：分离人声 → 按台词与声纹定位该角色的句子 → 逐句转成声线锚的嗓音（每句时长只变 ≤0.05s，口型与画面不动、不重生视频）→ 回填，环境声与音效原样保留。' +
       '质检任一不过（转写覆盖率下降 / 时长差 >0.1s / 与锚的相似度没提升 / 响度差 >1dB）就保留原音轨并退回该镜费用。' +
-      '用 get_voice_unify_status 看进度与每镜前后对比；status=applied 的镜重拼成片（rerender_episode）后生效。',
+      '用 get_voice_unify_status 看进度与每镜前后对比；status=applied 的镜用 compose_episode 重拼成片后生效（会按换轨后的音频重新对齐字幕）；别用 rerender_episode——换轨后它可能沿用旧时间轴仍播旧音频，即使换上了字幕也只能按字数估算、与新声音错位。',
     { episode_id: z.number().int().positive(), quote_id: z.string().min(1) },
     async ({ episode_id, quote_id }) =>
       jsonResult(await client.producePost(`/episodes/${episode_id}/voice-unify`, { quote_id })),
@@ -3391,7 +3428,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '**不重新生成视频**——按 TTS 档(千字符)计费,比 regenerate_shot_video(按秒计费,720p 每秒上百点)低几个数量级。' +
       '代价:画面口型是按原音演的,换音后可能对不上;口型看不清的镜(背身/远景/画外)几乎无损,大特写慎用。' +
       '★产物自动写回该镜(返回 persisted:true),但写回 ≠ 进成片:' +
-      '以 get_dialogue_repair_status 的 productEffective 为准——true 就 rerender_episode 重拼;' +
+      '以 get_dialogue_repair_status 的 productEffective 为准——true 就 compose_episode 重拼(会按换轨后的音频重新对齐字幕);别用 rerender_episode——换轨后它可能沿用旧时间轴仍播旧音频,即使换上了字幕也只能按字数估算、与新声音错位;' +
       'false 时按 pendingCompose 先补合成再重拼,否则成片仍是旧音频。' +
       '★该镜已有对口型产物时,成片优先用对口型版,换轨不会生效。整集批量用 repair_episode_dialogue。' +
       '\n★写回前会对产物复核(与 scan_dialogue_coverage 同一判据):换完仍断音(truncated)、重复念/多念(extra_speech)、' +
@@ -3412,7 +3449,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★台词栏没有旁白行会直接报错;厂商在无台词镜里乱念,用 replace_shot_dialogue 的 mute_only。' +
       '★放置:新旁白按自然语速放进可用空间(纯旁白镜到片尾、混合镜到下一段出镜台词前),放得下就原速,放不下才整体加速;' +
       '纯旁白单说话人整段一起换、只调一次速,不再逐句贴旧声音的时长(那样同一句会一快一慢)。返回的 segments[].atempo 就是实际变速。' +
-      '★写回后成片会直接用它(不需要额外开关),rerender_episode 重拼即可;复核不通过不写回,旁白合成费不退。' +
+      '★写回后成片会直接用它(不需要额外开关),compose_episode 重拼即可(会按换轨后的音频重新对齐字幕);别用 rerender_episode——换轨后它可能沿用旧时间轴仍播旧音频,即使换上了字幕也只能按字数估算、与新声音错位;复核不通过不写回,旁白合成费不退。' +
       '★换完后 get_storyboards 的 **effective_video_url** 是成片实际用的这版;video_url 仍是原片(旧声音),预览/自查别拿 video_url 听。' +
       '★换完不满意随时 restore_original_audio 还原回厂商原声(免费)。',
     { storyboard_id: z.number().int().positive() },
@@ -3442,7 +3479,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '若整集都是大特写对白,宁可选 regenerate_shot_video 重生。' +
       '后台异步串行(CosyVoice 合成不并发),进度用 dialogue-repair-status 查;余额不足会中止且不扣费。' +
       '每镜换完都会复核,仍断音/重复念/念错的镜不写回、费用退回,列进 status 的 verify_rejected。' +
-      '修完先看 get_dialogue_repair_status 的 productEffective:true 才重拼成片(compose_episode / rerender_episode);' +
+      '修完先看 get_dialogue_repair_status 的 productEffective:true 才用 compose_episode 重拼成片(会按换轨后的音频重新对齐字幕);别用 rerender_episode——换轨后它可能沿用旧时间轴仍播旧音频,即使换上了字幕也只能按字数估算、与新声音错位;' +
       'false 时按 pendingCompose 先补合成,否则成片里还是旧音频。',
     {
       episode_id: z.number().int().positive(),

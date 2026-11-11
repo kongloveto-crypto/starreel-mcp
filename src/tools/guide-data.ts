@@ -206,9 +206,10 @@ export const ENTRY_POINTS: EntryPoint[] = [
       'regenerate_shot_video',
       'edit_video_shot(就地编辑;get_edit_capabilities 先看当前引擎支持什么)',
       'repaint_shot_video / reskin_shot_video(保留原片动作、整体换人换装;get_repaint_capabilities 先看本剧开没开)',
-      'rerender_episode(改完后免费重拼)',
+      'rerender_episode(改完后免费重拼;换过音频的镜用 compose_episode)',
     ],
-    note: '改了台词而视频已存在 → 视频仍念旧词,必须 `regenerate_shot_video`,重拼救不了。',
+    note: '改了台词而视频已存在 → 视频仍念旧词,必须 `regenerate_shot_video`,重拼救不了。' +
+      '换过音频的镜(replace_shot_dialogue / repair_episode_dialogue / revoice_narration / unify_voices / restore_original_audio)用 `compose_episode` 重拼,别用 `rerender_episode`——后者可能沿用旧时间轴仍播旧音频,字幕也不会按新音频重新对齐。',
     flow: 'scan_dialogue_coverage / scan_intra_shot_cuts 先定病因 → update_shot / replace_shot_dialogue / repair_episode_dialogue / split_shot / trim_shot / regenerate_shot_video / edit_video_shot → rerender_episode',
   },
   {
@@ -329,7 +330,7 @@ export const PIPELINE: PipelineStep[] = [
   },
   {
     step: '10 成片与交付',
-    tools: ['compose_episode', 'get_final_cut', 'get_export', 'rerender_episode', 'get_deliverables', 'generate_deliverables', 'render_multi_aspect', 'generate_effects', 'generate_transitions', 'set_drama_logo', 'get_drama_logo', 'set_drama_watermark(片角文字角标:书法片名/署名,可限时段淡入淡出)', 'get_drama_watermark', 'update_project_settings(color_lut 整片调色:预设或自带 .cube)', 'match_color_lut(按参考图生成匹配的 .cube,免费)', 'generate_episode_poster', 'get_episode_poster_card', 'set_episode_poster_card(片尾海报卡:片尾 logo / KV / 二维码 + CTA)', 'generate_drama_poster', 'generate_cover', 'translate_subtitles', 'get_pipeline_status'],
+    tools: ['compose_episode', 'get_final_cut', 'concat_episodes(同剧几集的成片按顺序拼成一条,免费)', 'get_episode_concat', 'get_export', 'rerender_episode', 'get_deliverables', 'generate_deliverables', 'render_multi_aspect', 'generate_effects', 'generate_transitions', 'set_drama_logo', 'get_drama_logo', 'set_drama_watermark(片角文字角标:书法片名/署名,可限时段淡入淡出)', 'get_drama_watermark', 'update_project_settings(color_lut 整片调色:预设或自带 .cube)', 'match_color_lut(按参考图生成匹配的 .cube,免费)', 'generate_episode_poster', 'get_episode_poster_card', 'set_episode_poster_card(片尾海报卡:片尾 logo / KV / 二维码 + CTA)', 'generate_drama_poster', 'generate_cover', 'translate_subtitles', 'get_pipeline_status'],
     billing: '免费',
     note: '终拼免费(ffmpeg+COS);成片前用 `get_pipeline_status` 确认没有缺镜;配乐晚于成片(bgm_stale)重新 compose 即可。',
   },
