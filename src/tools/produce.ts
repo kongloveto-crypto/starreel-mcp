@@ -3389,7 +3389,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★该镜已有对口型产物时,成片优先用对口型版,换轨不会生效。整集批量用 repair_episode_dialogue。' +
       '\n★写回前会对产物复核(与 scan_dialogue_coverage 同一判据):换完仍断音(truncated)、重复念/多念(extra_speech)、' +
       '念的不是台词(off_script)→ **不写回**、本次费用自动退回,返回错误说明哪一类——这类镜换音修不好,改用 regenerate_shot_video。' +
-      '成功时返回 verify:verified=false 表示没判出来(转写失败/台词太短),照常写回但没复核过,自己听一下。',
+      '成功时返回 verify:verified=false 表示没判出来(转写失败/台词太短),照常写回但没复核过,自己听一下。' +
+      '\n★重配或静音后想回到厂商原声:restore_original_audio(免费,原片从不被改写)。',
     { storyboard_id: z.number().int().positive(), mute_only: z.boolean().optional().describe('只静音、不重配(不扣费):把视频原声里的人声段静掉。用于厂商在**没有台词的镜里自己念出声**的情况。★原声剧上本镜的旁白也在原声里,会一起被静掉——要换旁白用 revoice_narration,别用它') },
     async ({ storyboard_id, mute_only }) =>
       jsonResult(await client.producePost(`/storyboards/${storyboard_id}/dialogue-replace`, mute_only ? { mode: 'mute' } : {})),
@@ -3405,10 +3406,24 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '★放置:新旁白按自然语速放进可用空间(纯旁白镜到片尾、混合镜到下一段出镜台词前),放得下就原速,放不下才整体加速;' +
       '纯旁白单说话人整段一起换、只调一次速,不再逐句贴旧声音的时长(那样同一句会一快一慢)。返回的 segments[].atempo 就是实际变速。' +
       '★写回后成片会直接用它(不需要额外开关),rerender_episode 重拼即可;复核不通过不写回,旁白合成费不退。' +
-      '★换完后 get_storyboards 的 **effective_video_url** 是成片实际用的这版;video_url 仍是原片(旧声音),预览/自查别拿 video_url 听。',
+      '★换完后 get_storyboards 的 **effective_video_url** 是成片实际用的这版;video_url 仍是原片(旧声音),预览/自查别拿 video_url 听。' +
+      '★换完不满意随时 restore_original_audio 还原回厂商原声(免费)。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) =>
       jsonResult(await client.producePost(`/storyboards/${storyboard_id}/dialogue-replace`, { mode: 'narration' })),
+  )
+  server.tool(
+    'restore_original_audio',
+    '还原某镜的**厂商原声**(免费、可逆、不重生视频):撤掉 revoice_narration 旁白换轨 / replace_shot_dialogue 对白重配或 mute_only 静音 / ' +
+      'repair_episode_dialogue / unify_voices 写下的换轨产物,本镜回到原片(video_url)自带的原始音轨。换轨从不改写原片,所以随时可还原。' +
+      '返回 status:restored=已还原;noop=本镜本来就没换轨/静音,无需操作;' +
+      '错误 original_audio_unavailable=原片视频为空、拿不到原声(换轨产物保留不动,要原声只能 regenerate_shot_video);' +
+      'restore_conflict=还原时本镜正被另一次换轨写入,确认没有在跑的换轨后重试。' +
+      '★lip_sync_still_active=true 表示本镜还有对口型产物,成片仍优先用对口型版。' +
+      '★还原后要 compose_episode 或 rerender_episode 重拼成片才生效(免费);之后 get_storyboards 的 effective_video_url 会回到 video_url。',
+    { storyboard_id: z.number().int().positive() },
+    async ({ storyboard_id }) =>
+      jsonResult(await client.producePost(`/storyboards/${storyboard_id}/restore-original-audio`, {})),
   )
   server.tool(
     'repair_episode_dialogue',

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.336",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.336 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.337",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.337 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -16193,7 +16193,7 @@
       "post": {
         "operationId": "replace_shot_dialogue",
         "summary": "换某镜对白音色/声线(转写+克隆重配)",
-        "description": "换某镜对白音色/声线(转写+克隆重配)。**同步调用**,约 1 分钟返回产物,按用量后付不欠费。要求本镜有原声视频+角色声线定妆音。★它也是「这一镜台词没念完/念了别的」最经济的修法:用克隆音重配整句并静音原声段,**不重新生成视频**——按 TTS 档(千字符)计费,比 regenerate_shot_video(按秒计费,720p 每秒上百点)低几个数量级。代价:画面口型是按原音演的,换音后可能对不上;口型看不清的镜(背身/远景/画外)几乎无损,大特写慎用。★产物自动写回该镜(返回 persisted:true),但写回 ≠ 进成片:以 get_dialogue_repair_status 的 productEffective 为准——true 就 rerender_episode 重拼;false 时按 pendingCompose 先补合成再重拼,否则成片仍是旧音频。★该镜已有对口型产物时,成片优先用对口型版,换轨不会生效。整集批量用 repair_episode_dialogue。\n★写回前会对产物复核(与 scan_dialogue_coverage 同一判据):换完仍断音(truncated)、重复念/多念(extra_speech)、念的不是台词(off_script)→ **不写回**、本次费用自动退回,返回错误说明哪一类——这类镜换音修不好,改用 regenerate_shot_video。成功时返回 verify:verified=false 表示没判出来(转写失败/台词太短),照常写回但没复核过,自己听一下。",
+        "description": "换某镜对白音色/声线(转写+克隆重配)。**同步调用**,约 1 分钟返回产物,按用量后付不欠费。要求本镜有原声视频+角色声线定妆音。★它也是「这一镜台词没念完/念了别的」最经济的修法:用克隆音重配整句并静音原声段,**不重新生成视频**——按 TTS 档(千字符)计费,比 regenerate_shot_video(按秒计费,720p 每秒上百点)低几个数量级。代价:画面口型是按原音演的,换音后可能对不上;口型看不清的镜(背身/远景/画外)几乎无损,大特写慎用。★产物自动写回该镜(返回 persisted:true),但写回 ≠ 进成片:以 get_dialogue_repair_status 的 productEffective 为准——true 就 rerender_episode 重拼;false 时按 pendingCompose 先补合成再重拼,否则成片仍是旧音频。★该镜已有对口型产物时,成片优先用对口型版,换轨不会生效。整集批量用 repair_episode_dialogue。\n★写回前会对产物复核(与 scan_dialogue_coverage 同一判据):换完仍断音(truncated)、重复念/多念(extra_speech)、念的不是台词(off_script)→ **不写回**、本次费用自动退回,返回错误说明哪一类——这类镜换音修不好,改用 regenerate_shot_video。成功时返回 verify:verified=false 表示没判出来(转写失败/台词太短),照常写回但没复核过,自己听一下。\n★重配或静音后想回到厂商原声:restore_original_audio(免费,原片从不被改写)。",
         "tags": [
           "storyboards"
         ],
@@ -18740,6 +18740,64 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "StarReel envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "description": "Operation result payload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid balance (never overdrafts); response carries `needed` points"
+          }
+        }
+      }
+    },
+    "/storyboards/{storyboard_id}/restore-original-audio": {
+      "post": {
+        "operationId": "restore_original_audio",
+        "summary": "还原某镜的**厂商原声**(免费、可逆、不重生视频):撤掉 revoice_narration 旁白换轨 / replace_shot_dialogue 对白重配或 mute_only 静音 / repair_episode_dialogu",
+        "description": "还原某镜的**厂商原声**(免费、可逆、不重生视频):撤掉 revoice_narration 旁白换轨 / replace_shot_dialogue 对白重配或 mute_only 静音 / repair_episode_dialogue / unify_voices 写下的换轨产物,本镜回到原片(video_url)自带的原始音轨。换轨从不改写原片,所以随时可还原。返回 status:restored=已还原;noop=本镜本来就没换轨/静音,无需操作;错误 original_audio_unavailable=原片视频为空、拿不到原声(换轨产物保留不动,要原声只能 regenerate_shot_video);restore_conflict=还原时本镜正被另一次换轨写入,确认没有在跑的换轨后重试。★lip_sync_still_active=true 表示本镜还有对口型产物,成片仍优先用对口型版。★还原后要 compose_episode 或 rerender_episode 重拼成片才生效(免费);之后 get_storyboards 的 effective_video_url 会回到 video_url。",
+        "tags": [
+          "storyboards"
+        ],
+        "parameters": [
+          {
+            "name": "storyboard_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "StarReel envelope",
