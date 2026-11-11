@@ -1770,6 +1770,16 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   hard cuts, per-episode loudness is matched. Burned-in subtitles / end cards / BGM of each episode
   are kept as is. It never replaces any episode's own cut. 403 = not enabled for this drama. Don't
   download the cuts and join them locally.
+- **Join final cuts across dramas** (one film that was produced as two or more dramas, e.g. one drama
+  per visual style): same tool with `cross_drama=true`. `drama_id` is the **host drama** (the result
+  is stored on it and only shows up in its `get_episode_concat`); `episode_ids` may include episodes
+  of other dramas. Every drama involved must be **owned by the caller** and not deleted — dramas the
+  caller merely collaborates on are rejected (`episode_not_owned`, same answer as "does not exist");
+  a collaborator on the host drama gets 403 `cross_owner_only`. Put the episode whose resolution /
+  aspect ratio you want first. Still free. Without `cross_drama` a foreign episode id is always
+  rejected (`episode_not_in_drama`). A running cross-drama join occupies every drama it involves
+  (409 with `host_drama_id`). 403 `cross_gate_off` = cross-drama joining is not enabled for one of
+  the dramas (the message names it).
 - **Final-cut length and resolution**: every non-hard-cut transition overlaps two shots, so the
   final cut is shorter than the storyboard total (`declared_total_s`). `get_final_cut` /
   `review_final_cut` return `duration_check` (measured `actual_duration_s`, `delta_s`, `causes`,

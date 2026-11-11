@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StarReel Production API",
-    "version": "0.1.344",
-    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.344 tool surface (operationIds match MCP tool names 1:1)."
+    "version": "0.1.347",
+    "description": "Turn a script into a finished, downloadable short-drama episode over REST.\n\nPipeline: script → AI rewrite → cast/scenes/props extraction → storyboards → portraits & sheets + scene plates → keyframes → video shots → TTS → final cut (.mp4).\n\n**Billing is prepaid and agent-safe**: big-ticket stages are quote-then-generate (`quote_*` returns a `quote_id`). For video, quote == actual charge. For images the quote is a *range* — models billed per reference image are priced before those are assembled, so `estimated_points` is the upper bound (size the balance by it and a run never dies half-way) and `typical_points` is the usual cost; fixed-price models return the two equal. Insufficient balance returns 402 — nothing half-runs and the account never goes negative.\n\nAuth: exchange your API key at `POST /v1/agent/token` for a 15-minute bearer token.\n\nGenerated from the @starreel/mcp v0.1.347 tool surface (operationIds match MCP tool names 1:1)."
   },
   "servers": [
     {
@@ -2809,8 +2809,8 @@
     "/dramas/{drama_id}/episode-concat": {
       "post": {
         "operationId": "concat_episodes",
-        "summary": "把**同一部剧**里几集已经终拼好的成片,按你给的顺序首尾相接拼成一条(免费:不调厂商、不扣点、不重建时间轴)",
-        "description": "把**同一部剧**里几集已经终拼好的成片,按你给的顺序首尾相接拼成一条(免费:不调厂商、不扣点、不重建时间轴)。后台跑,立即返回 concat_id,用 get_episode_concat 轮询到 completed 取 download_url。\n★什么时候用:一条片子为了分段制作拆成了几集(每集各自 compose_episode),最后要一条完整成片时——别让客户下载到本地自己拼,那会绕开平台的规格统一与响度对齐。\n★前置条件(不满足回 400,blocked 里逐集写明原因):每一集都必须属于这部剧;每一集都已 compose_episode 且成片就绪(get_final_cut 的 status=completed);成片不能是过期的(该集的镜头或配乐在成片之后改过 → 先对那一集重新 compose_episode)。合集总时长上限 30 分钟(超了回 400,分批拼)。先带 dry_run=true 调一次可只做校验、不发起。\n★拼出来是什么样:分辨率与帧率统一到 episode_ids 里**第一集**的成片;画幅不同的集等比缩放后补黑边(不裁切),回执 pieces[].padded / warnings 会标出;接缝是硬切;各集整体响度向第一集对齐,接缝处音量不会突然变大变小。每一集成片里**已经烧进去**的字幕、角标、片头片尾卡、配乐原样保留——不想让中间几集的片尾卡出现在合集里,先在那几集关掉片尾卡并重新 compose_episode,再来拼;配乐在接缝处是硬切。\n★产物挂在剧上,**不覆盖**任何一集自己的成片;同一部剧同一时间只能有一条在跑(再发回 409,带回在跑那条的 concat_id)。\n★403 = 这部剧尚未开通本能力(不是调用姿势错了),别重试,告诉客户联系平台开通。只能拼同一部剧的集,跨剧暂不支持。",
+        "summary": "把几集已经终拼好的成片,按你给的顺序首尾相接拼成一条(免费:不调厂商、不扣点、不重建时间轴)",
+        "description": "把几集已经终拼好的成片,按你给的顺序首尾相接拼成一条(免费:不调厂商、不扣点、不重建时间轴)。默认只拼**同一部剧**里的集;带 cross_drama=true 可以把客户**本人名下不同剧**的集拼在一起(见下方「跨剧」)。后台跑,立即返回 concat_id,用 get_episode_concat 轮询到 completed 取 download_url。\n★什么时候用:一条片子为了分段制作拆成了几集(每集各自 compose_episode),最后要一条完整成片时——别让客户下载到本地自己拼,那会绕开平台的规格统一与响度对齐。\n★前置条件(不满足回 400,blocked 里逐集写明原因):每一集都必须属于这部剧(跨剧见下);每一集都已 compose_episode 且成片就绪(get_final_cut 的 status=completed);成片不能是过期的(该集的镜头或配乐在成片之后改过 → 先对那一集重新 compose_episode)。合集总时长上限 30 分钟(超了回 400,分批拼)。先带 dry_run=true 调一次可只做校验、不发起。\n★拼出来是什么样:分辨率与帧率统一到 episode_ids 里**第一集**的成片;画幅不同的集等比缩放后补黑边(不裁切),回执 pieces[].padded / warnings 会标出;接缝是硬切;各集整体响度向第一集对齐,接缝处音量不会突然变大变小。每一集成片里**已经烧进去**的字幕、角标、片头片尾卡、配乐原样保留——不想让中间几集的片尾卡出现在合集里,先在那几集关掉片尾卡并重新 compose_episode,再来拼;配乐在接缝处是硬切。\n★产物挂在剧上,**不覆盖**任何一集自己的成片;同一部剧同一时间只能有一条在跑(再发回 409,带回在跑那条的 concat_id)。\n★跨剧(cross_drama=true)——什么时候用:一条片子已经拆成两部(或几部)剧各自做完(例如一部片两种画风、各建了一部剧),要在平台上接成一条。drama_id 填「宿主剧」(产物挂在它上面,之后只在它的 get_episode_concat 里查得到),episode_ids 里可以有别的剧的集。前置条件:宿主剧和清单里每一集所在的剧都必须是客户**本人名下**(本人是剧主)、未删除的剧——只是协作者的剧不行(哪怕有编辑权限),别人的剧不行;不满足的集回 400、code=episode_not_owned(不区分「不存在」与「不是你的」)。宿主剧上你只是协作者 → 403 cross_owner_only。跨剧同样免费,拼法与同剧完全一样(规格取 episode_ids 里第一条成片,所以想要哪部剧的分辨率/画幅就把它的集排第一)。不带 cross_drama 时清单里混进别的剧的集一律被拒(episode_not_in_drama)——跨剧必须显式声明,防止手滑填错集号。一条在跑的跨剧顺拼会占住它涉及的每一部剧:这期间这些剧上再发顺拼回 409(host_drama_id = 在跑那条挂在哪部剧上)。\n★403 = 尚未开通(不是调用姿势错了),别重试,告诉客户联系平台开通:gate_off = 这部剧没开顺拼;cross_gate_off = 跨剧顺拼没开(宿主剧和清单里每一部剧都要开通,message 里会点名哪部剧没开)。",
         "tags": [
           "dramas"
         ],
@@ -2840,7 +2840,10 @@
                     },
                     "minItems": 2,
                     "maxItems": 12,
-                    "description": "要拼的集 ID,**按拼接顺序**排列(2~12 集,不能重复;顺序不必等于集号)"
+                    "description": "要拼的集 ID,**按拼接顺序**排列(2~12 集,不能重复;顺序不必等于集号)。cross_drama=true 时可以含别的剧的集"
+                  },
+                  "cross_drama": {
+                    "type": "boolean"
                   },
                   "dry_run": {
                     "type": "boolean"
@@ -2883,7 +2886,7 @@
       "get": {
         "operationId": "get_episode_concat",
         "summary": "查这部剧的多集成片顺拼(concat_episodes)进度与产物",
-        "description": "查这部剧的多集成片顺拼(concat_episodes)进度与产物。免费。concats 按发起时间倒序,每条回 status(pending/processing/completed/failed)、episode_ids、download_url(completed 才有,可直接下载)、duration_sec、spec(成片分辨率与帧率)、pieces(每一集在合集里的起点 start_sec = 接缝位置、时长、是否被缩放 rescaled / 补黑边 padded / 换帧率 fps_converted、响度增益 gain_db)、warnings、error_msg。\n★source_changed=true:其中某一集在这次拼接之后又重新终拼过,这条合集是旧的——需要新版就重新 concat_episodes。\n★status=failed 且 error_msg 提到「重启打断」:平台维护打断了拼接,直接重新发起即可(免费)。enabled=false 表示这部剧尚未开通本能力。",
+        "description": "查这部剧的多集成片顺拼(concat_episodes)进度与产物。免费。concats 按发起时间倒序,每条回 status(pending/processing/completed/failed)、episode_ids、download_url(completed 才有,可直接下载)、duration_sec、spec(成片分辨率与帧率)、pieces(每一集在合集里的起点 start_sec = 接缝位置、时长、是否被缩放 rescaled / 补黑边 padded / 换帧率 fps_converted、响度增益 gain_db)、warnings、error_msg。\n★source_changed=true:其中某一集在这次拼接之后又重新终拼过,这条合集是旧的——需要新版就重新 concat_episodes。\n★status=failed 且 error_msg 提到「重启打断」:平台维护打断了拼接,直接重新发起即可(免费)。enabled=false 表示这部剧尚未开通本能力。\n★跨剧顺拼(cross_drama=true 的条目,带 host_drama_id / drama_ids / pieces[].drama_id):只挂在发起时的宿主剧上——要查它就用宿主剧的 drama_id 调本工具,在清单里别的剧上查不到;且只有剧主本人看得到(协作者的列表里没有)。cross_drama_enabled=false 表示这部剧尚未开通跨剧顺拼。",
         "tags": [
           "dramas"
         ],
@@ -5812,7 +5815,7 @@
       "get": {
         "operationId": "get_asset_binding_repair_plan",
         "summary": "只读生成一集历史缺失场景绑定的可审核修复提案",
-        "description": "只读生成一集历史缺失场景绑定的可审核修复提案。返回原始地点/时段、候选 ID、匹配依据、歧义和 proposed_scene_id；applied=false，绝不按名字自动回填。逐项核对后才由客户决定是否改绑。免费。",
+        "description": "只读生成一集历史缺失场景绑定的可审核修复提案。返回原始地点/时段、候选 ID、匹配依据、歧义和 proposed_scene_id；applied=false，绝不按名字自动回填。逐项核对后才由客户决定是否改绑。免费。★客户确认后逐镜调 update_shot 传 scene_id=<proposed_scene_id 或客户从 candidates 里选的 id> 落库(免费);proposed_scene_id 为 null 或有歧义的镜先问客户,别替客户挑。改完再跑 review_assets 核对。",
         "tags": [
           "episodes"
         ],
@@ -15443,7 +15446,7 @@
       "put": {
         "operationId": "update_shot",
         "summary": "逐镜编辑:改单个分镜的文本内容(景别/动作/台词/画面描述/运镜等)、面部表情(expression_hint)、时长(duration)、成片变速(speed_factor)、镜间转场(transition_type / transiti",
-        "description": "逐镜编辑:改单个分镜的文本内容(景别/动作/台词/画面描述/运镜等)、面部表情(expression_hint)、时长(duration)、成片变速(speed_factor)、镜间转场(transition_type / transition_duration_ms)、角色绑定(character_ids)、道具绑定(prop_ids)、画外音标记(character_presence)与服装绑定(active_wardrobe_id / appearance_wardrobes)。只传要改的字段、其余不动。★改镜(成功或被拒)都会作废覆盖本镜的未消费报价,生成时回 409 QUOTE_INVALIDATED——先改成功、回读核对,再报价。★台词装不下时平台按语速律自动抬时长;**已出视频的镜不会被抬过视频真长**(否则成片结尾定格),超出部分在返回的说明里提示按需要的时长 regenerate_shot_video 或 split_shot。显式传的 duration 照给。**免费**(纯文本写库)。★改 dialogue 会自动失效本镜已生成的 TTS 配音与字幕(需重出 tts);改文本不会自动重出图/视频,如需让画面跟上文本改动,改完再 regen 对应镜。用 get_storyboards 查改后结果(每镜带 character_ids / character_bindings / scene_id / prop_ids / active_wardrobe_id / appearance_wardrobes);景别/机位/运镜/剪辑意图与提示词正文用 get_shot_prompts 逐镜回读。★★【换衣服改这里,不是改文字】出图穿什么由**服装绑定**决定:单人镜用 active_wardrobe_id(整镜一件),多人同框各穿各的用 appearance_wardrobes(逐角色)。把「穿某某衣服」写进 description/action 不会换衣服。服装 id 用 list_wardrobe 查;改完不会自动重出图,要让画面跟上需重生本镜首帧再重生视频。★★原声镜(厂商原生音频)改 dialogue 后,本镜视频会被标记「待重生」——因为台词是**烤进视频人声**的,不重生就终拼,成片里念的仍是改动前的台词(典型现象:台词像是跑到了别的镜头上)。compose_episode 会以 advisory `stale_video_after_edit` 列出这些镜;正确处置是先 regenerate_shot_video 再终拼。★也可直接改本镜的四条提示词正文(image_prompt/video_prompt/first_frame_prompt/last_frame_prompt):改前先用 get_shot_prompts 读现值,别凭空覆盖——正文里的 @char:N / @scene:M 是出图时的补充参考标记,照原样保留即可。★注入谁的定妆图由 character_ids 决定、背景由 scene_id 决定:删标记不会让已绑定的人从画面消失,要让某人不出现就改 character_ids,他只有声音(画外音)就用 character_presence 标 voice_only;反过来别给未绑定的角色写 @char 标记——会把他的图注入进来。★★【出尾帧被拦下就是来改这里】出尾帧若报「此镜标为状态改变,但没有任何地方说明结束时是什么样子」(TERMINAL_DESC_GATE),修法是把**结束时画面是什么样**写进本镜 last_frame_prompt,然后重新出尾帧。别去重试出图——这类镜(action_motion_class=state_change 却没写终态)的尾帧历史成功率 9.4%,有终态描述的是 40.2%;不补描述就重生,送厂商的提示词里根本没有终态段,画出来仍和首帧一样、还是会被拒,而每次重生都照常扣费。get_shot_prompts 的 terminal_desc_missing=true 就是这个信号。★★【构图契约不会跟着改】改 shot_type / character_ids / character_presence / description / action 后,或 image_prompt / first_frame_prompt 里的人数、景别、局部(手/脸)、空镜/道具这类构图词变了时(只改服装、质感、光线措辞不算),本镜的构图契约(画面里可见几人、主体是人物还是手部等局部/道具、景别)不会自动重推,出图组织画面与帧审计判人数仍按旧契约来(典型:改成局部特写、解绑全部角色,出图照样画人像)。回执带 frame_contract_advisory 就是这种情况:讲给客户,客户同意后调 rederive_shot_contract(按 token 后付)重推,得出 updated 再报价出图;客户确认画面人数与主体都没变可以不推。★改 action 前先用 get_shot_prompts 读现值(action),别凭空整段覆盖。",
+        "description": "逐镜编辑:改单个分镜的文本内容(景别/动作/台词/画面描述/运镜等)、面部表情(expression_hint)、时长(duration)、成片变速(speed_factor)、镜间转场(transition_type / transition_duration_ms)、角色绑定(character_ids)、场景绑定(scene_id)、道具绑定(prop_ids)、画外音标记(character_presence)与服装绑定(active_wardrobe_id / appearance_wardrobes)。只传要改的字段、其余不动。★改镜(成功或被拒)都会作废覆盖本镜的未消费报价,生成时回 409 QUOTE_INVALIDATED——先改成功、回读核对,再报价。★台词装不下时平台按语速律自动抬时长;**已出视频的镜不会被抬过视频真长**(否则成片结尾定格),超出部分在返回的说明里提示按需要的时长 regenerate_shot_video 或 split_shot。显式传的 duration 照给。**免费**(纯文本写库)。★改 dialogue 会自动失效本镜已生成的 TTS 配音与字幕(需重出 tts);改文本不会自动重出图/视频,如需让画面跟上文本改动,改完再 regen 对应镜。用 get_storyboards 查改后结果(每镜带 character_ids / character_bindings / scene_id / prop_ids / active_wardrobe_id / appearance_wardrobes);景别/机位/运镜/剪辑意图与提示词正文用 get_shot_prompts 逐镜回读。★★【换衣服改这里,不是改文字】出图穿什么由**服装绑定**决定:单人镜用 active_wardrobe_id(整镜一件),多人同框各穿各的用 appearance_wardrobes(逐角色)。把「穿某某衣服」写进 description/action 不会换衣服。服装 id 用 list_wardrobe 查;改完不会自动重出图,要让画面跟上需重生本镜首帧再重生视频。★★原声镜(厂商原生音频)改 dialogue 后,本镜视频会被标记「待重生」——因为台词是**烤进视频人声**的,不重生就终拼,成片里念的仍是改动前的台词(典型现象:台词像是跑到了别的镜头上)。compose_episode 会以 advisory `stale_video_after_edit` 列出这些镜;正确处置是先 regenerate_shot_video 再终拼。★也可直接改本镜的四条提示词正文(image_prompt/video_prompt/first_frame_prompt/last_frame_prompt):改前先用 get_shot_prompts 读现值,别凭空覆盖——正文里的 @char:N / @scene:M 是出图时的补充参考标记,照原样保留即可。★注入谁的定妆图由 character_ids 决定、背景由 scene_id 决定:删标记不会让已绑定的人从画面消失,要让某人不出现就改 character_ids,他只有声音(画外音)就用 character_presence 标 voice_only;反过来别给未绑定的角色写 @char 标记——会把他的图注入进来。★★【出尾帧被拦下就是来改这里】出尾帧若报「此镜标为状态改变,但没有任何地方说明结束时是什么样子」(TERMINAL_DESC_GATE),修法是把**结束时画面是什么样**写进本镜 last_frame_prompt,然后重新出尾帧。别去重试出图——这类镜(action_motion_class=state_change 却没写终态)的尾帧历史成功率 9.4%,有终态描述的是 40.2%;不补描述就重生,送厂商的提示词里根本没有终态段,画出来仍和首帧一样、还是会被拒,而每次重生都照常扣费。get_shot_prompts 的 terminal_desc_missing=true 就是这个信号。★★【构图契约不会跟着改】改 shot_type / character_ids / character_presence / description / action 后,或 image_prompt / first_frame_prompt 里的人数、景别、局部(手/脸)、空镜/道具这类构图词变了时(只改服装、质感、光线措辞不算),本镜的构图契约(画面里可见几人、主体是人物还是手部等局部/道具、景别)不会自动重推,出图组织画面与帧审计判人数仍按旧契约来(典型:改成局部特写、解绑全部角色,出图照样画人像)。回执带 frame_contract_advisory 就是这种情况:讲给客户,客户同意后调 rederive_shot_contract(按 token 后付)重推,得出 updated 再报价出图;客户确认画面人数与主体都没变可以不推。★改 action 前先用 get_shot_prompts 读现值(action),别凭空整段覆盖。",
         "tags": [
           "storyboards"
         ],
@@ -15572,6 +15575,17 @@
                       "type": "integer",
                       "exclusiveMinimum": 0
                     }
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "prop_ids": {
                     "type": "array",

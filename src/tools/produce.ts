@@ -1077,7 +1077,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'get_asset_binding_repair_plan',
-    '只读生成一集历史缺失场景绑定的可审核修复提案。返回原始地点/时段、候选 ID、匹配依据、歧义和 proposed_scene_id；applied=false，绝不按名字自动回填。逐项核对后才由客户决定是否改绑。免费。',
+    '只读生成一集历史缺失场景绑定的可审核修复提案。返回原始地点/时段、候选 ID、匹配依据、歧义和 proposed_scene_id；applied=false，绝不按名字自动回填。逐项核对后才由客户决定是否改绑。免费。' +
+      '★客户确认后逐镜调 update_shot 传 scene_id=<proposed_scene_id 或客户从 candidates 里选的 id> 落库(免费);proposed_scene_id 为 null 或有歧义的镜先问客户,别替客户挑。改完再跑 review_assets 核对。',
     { episode_id: z.number().int().positive() },
     async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/asset-binding-repair-plan`)),
   )
@@ -2255,11 +2256,12 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'concat_episodes',
-    '把**同一部剧**里几集已经终拼好的成片,按你给的顺序首尾相接拼成一条(免费:不调厂商、不扣点、不重建时间轴)。'
+    '把几集已经终拼好的成片,按你给的顺序首尾相接拼成一条(免费:不调厂商、不扣点、不重建时间轴)。'
+      + '默认只拼**同一部剧**里的集;带 cross_drama=true 可以把客户**本人名下不同剧**的集拼在一起(见下方「跨剧」)。'
       + '后台跑,立即返回 concat_id,用 get_episode_concat 轮询到 completed 取 download_url。'
       + '\n★什么时候用:一条片子为了分段制作拆成了几集(每集各自 compose_episode),最后要一条完整成片时——'
       + '别让客户下载到本地自己拼,那会绕开平台的规格统一与响度对齐。'
-      + '\n★前置条件(不满足回 400,blocked 里逐集写明原因):每一集都必须属于这部剧;每一集都已 compose_episode 且成片就绪'
+      + '\n★前置条件(不满足回 400,blocked 里逐集写明原因):每一集都必须属于这部剧(跨剧见下);每一集都已 compose_episode 且成片就绪'
       + '(get_final_cut 的 status=completed);成片不能是过期的(该集的镜头或配乐在成片之后改过 → 先对那一集重新 compose_episode)。'
       + '合集总时长上限 30 分钟(超了回 400,分批拼)。先带 dry_run=true 调一次可只做校验、不发起。'
       + '\n★拼出来是什么样:分辨率与帧率统一到 episode_ids 里**第一集**的成片;画幅不同的集等比缩放后补黑边(不裁切),'
@@ -2267,11 +2269,21 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       + '每一集成片里**已经烧进去**的字幕、角标、片头片尾卡、配乐原样保留——不想让中间几集的片尾卡出现在合集里,'
       + '先在那几集关掉片尾卡并重新 compose_episode,再来拼;配乐在接缝处是硬切。'
       + '\n★产物挂在剧上,**不覆盖**任何一集自己的成片;同一部剧同一时间只能有一条在跑(再发回 409,带回在跑那条的 concat_id)。'
-      + '\n★403 = 这部剧尚未开通本能力(不是调用姿势错了),别重试,告诉客户联系平台开通。只能拼同一部剧的集,跨剧暂不支持。',
+      + '\n★跨剧(cross_drama=true)——什么时候用:一条片子已经拆成两部(或几部)剧各自做完(例如一部片两种画风、各建了一部剧),要在平台上接成一条。'
+      + 'drama_id 填「宿主剧」(产物挂在它上面,之后只在它的 get_episode_concat 里查得到),episode_ids 里可以有别的剧的集。'
+      + '前置条件:宿主剧和清单里每一集所在的剧都必须是客户**本人名下**(本人是剧主)、未删除的剧——'
+      + '只是协作者的剧不行(哪怕有编辑权限),别人的剧不行;不满足的集回 400、code=episode_not_owned(不区分「不存在」与「不是你的」)。'
+      + '宿主剧上你只是协作者 → 403 cross_owner_only。跨剧同样免费,拼法与同剧完全一样(规格取 episode_ids 里第一条成片,所以想要哪部剧的分辨率/画幅就把它的集排第一)。'
+      + '不带 cross_drama 时清单里混进别的剧的集一律被拒(episode_not_in_drama)——跨剧必须显式声明,防止手滑填错集号。'
+      + '一条在跑的跨剧顺拼会占住它涉及的每一部剧:这期间这些剧上再发顺拼回 409(host_drama_id = 在跑那条挂在哪部剧上)。'
+      + '\n★403 = 尚未开通(不是调用姿势错了),别重试,告诉客户联系平台开通:gate_off = 这部剧没开顺拼;'
+      + 'cross_gate_off = 跨剧顺拼没开(宿主剧和清单里每一部剧都要开通,message 里会点名哪部剧没开)。',
     {
       drama_id: z.number().int().positive(),
       episode_ids: z.array(z.number().int().positive()).min(2).max(12)
-        .describe('要拼的集 ID,**按拼接顺序**排列(2~12 集,不能重复;顺序不必等于集号)'),
+        .describe('要拼的集 ID,**按拼接顺序**排列(2~12 集,不能重复;顺序不必等于集号)。cross_drama=true 时可以含别的剧的集'),
+      cross_drama: z.boolean().optional()
+        .describe('true = 跨剧:允许 episode_ids 里有客户本人名下别的剧的集,drama_id 作为宿主剧。不传/false = 只拼 drama_id 这部剧的集'),
       dry_run: z.boolean().optional().describe('true = 只校验每集成片是否可用并返回将用哪条成片,不发起拼接'),
     },
     async ({ drama_id, ...body }) =>
@@ -2286,7 +2298,10 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       + 'warnings、error_msg。'
       + '\n★source_changed=true:其中某一集在这次拼接之后又重新终拼过,这条合集是旧的——需要新版就重新 concat_episodes。'
       + '\n★status=failed 且 error_msg 提到「重启打断」:平台维护打断了拼接,直接重新发起即可(免费)。'
-      + 'enabled=false 表示这部剧尚未开通本能力。',
+      + 'enabled=false 表示这部剧尚未开通本能力。'
+      + '\n★跨剧顺拼(cross_drama=true 的条目,带 host_drama_id / drama_ids / pieces[].drama_id):只挂在发起时的宿主剧上——'
+      + '要查它就用宿主剧的 drama_id 调本工具,在清单里别的剧上查不到;且只有剧主本人看得到(协作者的列表里没有)。'
+      + 'cross_drama_enabled=false 表示这部剧尚未开通跨剧顺拼。',
     { drama_id: z.number().int().positive() },
     async ({ drama_id }) => jsonResult(await client.produceGet(`/dramas/${drama_id}/episode-concat`)),
   )
@@ -3253,7 +3268,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
   )
   server.tool(
     'update_shot',
-    '逐镜编辑:改单个分镜的文本内容(景别/动作/台词/画面描述/运镜等)、面部表情(expression_hint)、时长(duration)、成片变速(speed_factor)、镜间转场(transition_type / transition_duration_ms)、角色绑定(character_ids)、道具绑定(prop_ids)、画外音标记(character_presence)与服装绑定(active_wardrobe_id / appearance_wardrobes)。只传要改的字段、其余不动。★改镜(成功或被拒)都会作废覆盖本镜的未消费报价,生成时回 409 QUOTE_INVALIDATED——先改成功、回读核对,再报价。' +
+    '逐镜编辑:改单个分镜的文本内容(景别/动作/台词/画面描述/运镜等)、面部表情(expression_hint)、时长(duration)、成片变速(speed_factor)、镜间转场(transition_type / transition_duration_ms)、角色绑定(character_ids)、场景绑定(scene_id)、道具绑定(prop_ids)、画外音标记(character_presence)与服装绑定(active_wardrobe_id / appearance_wardrobes)。只传要改的字段、其余不动。★改镜(成功或被拒)都会作废覆盖本镜的未消费报价,生成时回 409 QUOTE_INVALIDATED——先改成功、回读核对,再报价。' +
       '★台词装不下时平台按语速律自动抬时长;**已出视频的镜不会被抬过视频真长**(否则成片结尾定格),超出部分在返回的说明里提示按需要的时长 regenerate_shot_video 或 split_shot。显式传的 duration 照给。' +
       '**免费**(纯文本写库)。★改 dialogue 会自动失效本镜已生成的 TTS 配音与字幕(需重出 tts);' +
       '改文本不会自动重出图/视频,如需让画面跟上文本改动,改完再 regen 对应镜。用 get_storyboards 查改后结果(每镜带 character_ids / character_bindings / scene_id / prop_ids / active_wardrobe_id / appearance_wardrobes);景别/机位/运镜/剪辑意图与提示词正文用 get_shot_prompts 逐镜回读。' +
@@ -3292,6 +3307,11 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
         '改变后旧双边审核失效;不自动生成或补审,已出的帧/视频不会自动重出。'),
       character_ids: z.array(z.number().int().positive()).optional()
         .describe('本镜出场角色 ID 列表(★全量覆盖式,非增量,漏传的角色会被解绑)。决定出图时注入哪些角色的定妆图/设定图——非人角色(动物/生物)也必须绑定,否则形象会漂移。id 必须来自当前集已关联角色'),
+      scene_id: z.number().int().positive().nullable().optional()
+        .describe('本镜场景绑定(场景 id,get_scenes 查);null = 清空。决定出图时注入哪张场景图当背景锚——没绑场景的镜没有背景锚,同一场各镜背景会漂。' +
+          'review_assets 报 binding_scene_missing / binding_scene_dangling 时就在这里补:先 get_asset_binding_repair_plan 拿提案,客户确认后把 proposed_scene_id 传进来。' +
+          '必须是本剧未删除的场景,否则 400 且本请求一个字段都不写。提示词里的 @scene:旧id 标记会随改绑自动改成新 id。' +
+          '★改完不会自动重出:已有首帧/尾帧/视频的背景仍是旧的,回执带 scene_id_note 时按它走(先 review_storyboards 复审,再重出本镜首帧与视频,都先报价)'),
       prop_ids: z.array(z.number().int().positive()).max(8).optional()
         .describe('本镜绑定的道具 ID 列表(★全量覆盖式,非增量,漏传的道具会被解绑;[] = 清空)。决定出图时注入哪些道具的道具图——' +
           '导入后发现某镜漏绑道具就用这里补,不用整集重导。先用 get_storyboards 读本镜现值 prop_ids、在它基础上增删再整体传回;道具 ID 用 get_props 查。' +
