@@ -232,3 +232,4 @@ npx openapi-typescript https://raw.githubusercontent.com/starreel/starreel-mcp/m
 ## License
 
 [MIT](./LICENSE) — this client is open; the production pipeline is a hosted service.
+ 
