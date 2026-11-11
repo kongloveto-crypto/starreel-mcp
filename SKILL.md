@@ -938,7 +938,12 @@ content that will be rejected.
     with `apply_precheck_fix`. That path keeps the optimistic lock and the
     pre-write re-checks; editing by hand skips both. The platform deliberately
     offers no one-click auto-fix — these heuristics carry false positives, and a
-    silent rewrite would damage shots that were already correct. Categories the
+    silent rewrite would damage shots that were already correct. **A proposal
+    carrying `requires_customer_consent: true`** (today: `forbidden_lighting_move`,
+    which moves a lighting clause containing a restricted term into the
+    `lighting` field) **must be confirmed by the customer in every execution
+    mode, managed mode included** — show the old and new value per field and
+    pass it to `apply_precheck_fix` only after they agree. Categories the
     platform will *not* touch come back under `blocked`; those are the ones that
     genuinely need a human. `get_health_report` after
     storyboards; `get_characters` after portraits to confirm every on-screen

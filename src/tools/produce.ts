@@ -273,7 +273,7 @@ export const WORKFLOW_HINT =
   '★**要跑全集就先 run_drama_precheck**(剧级汇总·免费·只读):一次拿到每集问题数与 attention(该先修哪几集),' +
   '按它定优先级,再对那几集跑 run_precheck 拿逐条明细;别一集一集盲扫。' +
   '注意它的 not_covered——剧级跳过唯一要看图的那道 lint,「全剧 0 条」≠「全查过了」。' +
-  '★揪出来之后别自己盲改:plan_precheck_fix 让平台算出提案 → apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳') + ';' +
+  '★揪出来之后别自己盲改:plan_precheck_fix 让平台算出提案 → apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳;带 requires_customer_consent 的提案除外') + ';' +
   '分镜后跑 get_health_report;定妆图出完用 get_characters 核对每个出场角色都有 image/sheet;' +
   '出帧后用 get_storyboards 看 frame_status 与 fail_reason/fail_hint(failed 的镜先修再往下,别带着废帧出视频;对客户转述用 frame_status_label,别说「失败」);' +
   '出视频后同样看 video_status;成片前用 get_pipeline_status 确认没有缺镜。' +
@@ -1210,7 +1210,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '会被景别闸反复拒;客户写明「腰部以上」等局部取景的不报),这类镜**任何正确的图都满足不了**,不改就会反复被拒并反复扣费,' +
       '出现时应先按提示改分镜再出图,而不是重试。\n' +
       '★**怎么改不用你猜**:调 plan_precheck_fix 让平台算出提案(哪一镜、把什么改成什么),' +
-      '再用 apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳') + '——比你自己用 update_shot 盲改稳,' +
+      '再用 apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳;带 requires_customer_consent 的提案除外') + '——比你自己用 update_shot 盲改稳,' +
       '那条路绕开了乐观锁与落库前复核。部分类别系统不替你改(提案里的 blocked),那些才需要人工调。\n' +
       '★★**镜已经反复出不来时也回来跑这个**——本工具不只是事前预检。' +
       '它同时报「同镜同因连拒已熔断(repeat-reject,24h 自动解除)」与「帧契约自相矛盾」,' +
@@ -1254,7 +1254,11 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '让平台**算出**该怎么改 run_precheck 揪出的「指令自相矛盾」类问题(第①步,只算不改)。'
       + '按文本用量计费(很小),不走报价确认。\n'
       + '★两段式,这一步不动任何数据:拿到提案后**逐条讲给客户**(哪一镜、把什么改成什么、为什么),'
-      + '再把采纳的那几条**原样**传给 apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳') + '。\n'
+      + '再把采纳的那几条**原样**传给 apply_precheck_fix 落库' + MODE_DECIDES('采纳哪几条,托管=全部采纳;带 requires_customer_consent 的提案除外') + '。\n'
+      + '★**带 requires_customer_consent: true 的提案任何执行模式都必须先问客户**(托管也不例外):'
+      + '现在只有一类——task=forbidden_lighting_move,把含光影/色温禁区词的分句整句挪到 lighting 字段。'
+      + '它处理的是禁区词,平台规定禁区词必须由客户本人确认;把逐字段的旧值/新值讲给客户,客户同意后才传给 apply_precheck_fix。'
+      + '客户没同意的这类提案不要传,其余提案照常按执行模式处理。\n'
       + '★**专业模式不要替客户决定**:这些判据有假阳,平台刻意不做「一键自动修」——'
       + '曾实测同一批提案里近半是判据误报,静默改会把本来正确的分镜改坏。\n'
       + '★返回的 blocked 列出「系统不替你改」的类别:那些要人工按 run_precheck 的提示调整分镜。'
@@ -1272,6 +1276,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     'apply_precheck_fix',
     '把客户**确认过**的提案落库(第②步)。免费(纯文本写库)。'
       + '入参就是 plan_precheck_fix 回的提案对象,**原样传回**即可——只传客户勾选采纳的那几条。\n'
+      + '★提案上带 requires_customer_consent: true 的(禁区词分句挪到 lighting 字段),托管模式也必须是客户本人明确同意过才传;'
+      + '没问过客户就别放进 proposals。\n'
       + '★落库前平台还会再过三道闸:乐观锁(库里的值变了就跳过,绝不覆盖别人的改动)、'
       + '准入复判、自净闸(改完判据没转绿也跳过)。所以部分条目进 skipped 是正常的,不是失败。\n'
       + '★返回的 remaining = 本集**还剩几条**预检问题,不是「改了几个字段」。'
@@ -1286,7 +1292,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
           old_value: z.string().nullable().optional().describe('★必须是 plan 给的原值:落库时做乐观锁,库里已经不是它了就跳过'),
           new_value: z.string().nullable().optional(),
         })),
-      })).describe('plan_precheck_fix 回的提案,原样传回;只放采纳的那几条(专业模式=客户点头的,托管=全部)'),
+      })).describe('plan_precheck_fix 回的提案,原样传回;只放采纳的那几条(专业模式=客户点头的,托管=全部;带 requires_customer_consent 的任何模式都须客户点头)'),
     },
     async ({ episode_id, proposals }) =>
       jsonResult(await client.producePost(`/episodes/${episode_id}/precheck-fix/apply`, { proposals })),
@@ -2281,7 +2287,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '字幕(show_subtitles/双语 subtitle_secondary_lang/位置/边距/动效)、转场——即项目设定页全部通用设定。免费。' +
       '⚠️ 世界观 Brief/族裔/画幅/一致性锚等改后,已生成的内容不会自动更新,需重生对应内容。' +
       '★aspect_ratio 除固定档外可设自由宽高比(数值如 2.35,只支持 Seedance 2.5 + Seedream + 非 4k、按剧灰度,未开通回 400),详见该参数说明。' +
-      '★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);' +
+      '★frame_chain_mode 管整剧跨镜帧链:off=整剧不做(出帧落定后的自动衔接、出视频时上一镜尾帧接下一镜首帧的逐缝接力、chain_frames、首尾呼应都不派图不改帧,报价里也不再计入);' +
+      '⚠️off 的画面代价:每镜首帧各自独立出图,人物站位与朝向、光线、背景布局、道具位置各镜各画,标了连续的接缝在成片里会跳——设 off 前先把这一点讲给客户、客户同意再设,别为了省点数默认关;回执的 frame_chain_off_notice 原样转告。' +
       'reframe=默认;strict=相邻缝只裸拷贝上镜尾帧不重生(已设的首尾呼应仍按 reframe 重生、照常计入报价;要全不派图用 off)。关掉后想用 chain_frames 要先改回 reframe/strict;改模式不会自动重出已有帧。' +
       '★auto_derive_assets 是整剧「自动补齐辅助资产」总开关(默认 true):' + AUTO_DERIVE_ASSETS_EFFECT +
       '★color_lut 是整片调色(终拼时对全片施加,字幕不受影响):' + COLOR_LUT_DESC,
@@ -2290,7 +2297,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       auto_derive_assets: z.boolean().optional().describe(
         '整剧自动补齐辅助资产开关(默认 true)。' + AUTO_DERIVE_ASSETS_EFFECT + '当前值见 get_drama 的 auto_derive_assets。'),
       frame_chain_mode: z.enum(['off', 'strict', 'reframe']).optional().describe(
-        '整剧跨镜帧链模式:off=整剧不做(含出帧落定后的自动衔接与 chain_frames)/strict=相邻缝只裸拷贝上镜尾帧(首尾呼应仍会重生计费)/reframe=默认。' +
+        '整剧跨镜帧链模式:off=整剧不做(含出帧落定后的自动衔接、出视频逐缝接力与 chain_frames;镜与镜之间人物站位 / 光线 / 背景不再承接,连续接缝会跳,先问客户)/strict=相邻缝只裸拷贝上镜尾帧(首尾呼应仍会重生计费)/reframe=默认。' +
         '关掉后想用 chain_frames 先改回 reframe 或 strict;改了不会自动重出已有帧。当前值见 get_drama 的 frame_chain_mode。'),
       genre: z.string().optional(),
       style: z.string().optional(),
@@ -3420,7 +3427,7 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
       '错误 original_audio_unavailable=原片视频为空、拿不到原声(换轨产物保留不动,要原声只能 regenerate_shot_video);' +
       'restore_conflict=还原时本镜正被另一次换轨写入,确认没有在跑的换轨后重试。' +
       '★lip_sync_still_active=true 表示本镜还有对口型产物,成片仍优先用对口型版。' +
-      '★还原后要 compose_episode 或 rerender_episode 重拼成片才生效(免费);之后 get_storyboards 的 effective_video_url 会回到 video_url。',
+      '★还原后用 compose_episode 重拼成片才生效(免费,会按原声重新对齐字幕);别用 rerender_episode——声音会回来,但本镜字幕只能按字数估算、和原声错位。之后 get_storyboards 的 effective_video_url 会回到 video_url。',
     { storyboard_id: z.number().int().positive() },
     async ({ storyboard_id }) =>
       jsonResult(await client.producePost(`/storyboards/${storyboard_id}/restore-original-audio`, {})),
