@@ -287,6 +287,7 @@ export const PIPELINE: PipelineStep[] = [
       'generate_portraits_and_sheets(定妆图+设定图,一致性锚·两者都要:调一次推进一步,定妆图齐了再调一次出设定图)', 'quote_character_portraits(只报定妆图;设定图无需报价)',
       'generate_world_concept(默认必做,仍走报价)', 'generate_color_script',
       'generate_art_bible', 'extract_visual_lock', 'extract_setting_brief', 'generate_video_style',
+      'set_episode_style(某一集用与剧级不同的画风:一部片两种画风时分成同剧两集,免费;设完先给本集出设定图)', 'get_episode_style',
       'quote_scene_images', 'generate_scene_images', 'generate_prop_sheet',
       'get_scene_prompt(读某场空景图的提示词正文,免费)', 'update_scene(image_prompt 改正文)', 'quote_regenerate_scene_image(单场重出报价,含可能派生的打光参考图)', 'regenerate_scene_image(单场重出,带 quote_id)',
     ],

@@ -1762,6 +1762,19 @@ to close") tells the vendor to fit that entire sequence into each 3-second shot.
   — narration-card shots ignore footage and the upload is rejected (`narration_card_no_footage`).
 - **Finish**: `compose_episode`, `get_final_cut`, `get_export`,
   `generate_episode_poster`, `generate_cover`
+- **Two art styles in one film**: split the film into two episodes of the **same** drama and give one of
+  them its own style with `set_episode_style` (free; `style_override` — a standard style key is best —
+  plus optional `art_bible_override` / `visual_lock_override` / `video_style_prompt_override`; empty
+  string clears a field). That episode's shot frames, videos and character sheets then follow the
+  episode style; other episodes are untouched. A style that is not a standard key gets **no** platform
+  style anchor (`effective_style_resolution.anchored=false`), so the look must be spelled out in the
+  three override texts. After setting it: `get_episode_style` → every on-screen character listed in
+  `missing_episode_sheets` needs an episode sheet first (`generate_character_sheets` on that episode,
+  billed) — otherwise frame generation returns 400 `episode_style.sheet_required` (no charge; add the
+  sheets, don't retry). When the override is set and `video_style_prompt_override` is empty, the
+  drama-level video style prompt is not carried into the episode. Props, scene plates and portraits
+  still use the drama style. 403 `episode_style.gate_off` = not enabled for this drama. Compose each
+  episode, then join them with `concat_episodes`. Never switch style inside one episode.
 - **Join several episodes of one drama into a single film**: `concat_episodes` (free; `drama_id` +
   `episode_ids` in playback order, 2–12) → poll `get_episode_concat` until `completed` → `download_url`.
   Every episode must already have a fresh final cut (`compose_episode` done, not stale) — a 400 lists

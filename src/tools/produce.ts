@@ -2306,6 +2306,55 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     async ({ drama_id }) => jsonResult(await client.produceGet(`/dramas/${drama_id}/episode-concat`)),
   )
   server.tool(
+    'get_episode_style',
+    '查某一集的**集级画风**现状(免费、只读):本集的画风覆盖 style_override、集级视频风格词 video_style_prompt_override、'
+      + '集级美术圣经 art_bible_override、集级视觉锁 visual_lock_override,以及解析后的生效值——'
+      + 'drama_style(剧级画风)、effective_style(本集实际按哪个画风出)、style_overridden(本集覆盖是否生效)、'
+      + 'effective_style_resolution(kind=known 标准档 / free-text 自由文本;anchored=false 表示平台不替这个画风下任何画风锚)、'
+      + 'effective_video_style_prompt(本集视频实际带的风格词)。'
+      + '\n★missing_episode_sheets:本集设了画风覆盖后,出镜却还没有**本集设定图**的角色——有一个就出不了镜头帧(见 set_episode_style)。'
+      + '\n★notes 是给客户看的中文提示,逐条原样转告。enabled=false 表示这部剧尚未开通集级画风覆盖(画风档 / 视频风格词现在设不了);'
+      + '集级美术圣经 / 视觉锁不受此限。',
+    { episode_id: z.number().int().positive() },
+    async ({ episode_id }) => jsonResult(await client.produceGet(`/episodes/${episode_id}/style-override`)),
+  )
+  server.tool(
+    'set_episode_style',
+    '给**某一集**设置与剧级不同的画风(免费,只改设置、不出图)。设了之后**这一集**的镜头帧、视频、角色设定图按集级画风出,'
+      + '别的集与剧级设置完全不变。只传要改的字段;传空串 = 清空该项(回退继承剧级)。返回与 get_episode_style 相同的现状。'
+      + '\n★什么时候用:一部片里有两段不同画风(例如一段写实、一段动画 / 绘画风)。做法是把两段分成同一部剧的两集,'
+      + '其中一集用本工具覆盖画风,各自出完、各自 compose_episode,最后用 concat_episodes 拼成一条——**不要**为此拆成两部剧。'
+      + '同一集之内不能切画风(帧链、参考图、场景组会跨画风互相污染)。'
+      + '\n★四个字段:'
+      + '\n· style_override:本集画风档。优先填标准档 key:realistic(写实)/ cinematic(电影感)/ film(复古胶片)/ noir(黑白光影)/ '
+      + 'anime(日系动画)/ ghibli(吉卜力风)/ comic(漫画)/ watercolor(水彩)/ ink(水墨)/ guoman(国漫)/ c3d(3D 动画)/ cg(CG 动画)/ clay(黏土定格);'
+      + '标准档里没有的画风(油画、厚涂、版画…)可以写一句画风描述,但平台**不会**替它下画风锚(回执 anchored=false),'
+      + '这时画面风格必须由下面三个字段写明,否则出来的仍接近写实。'
+      + '\n· art_bible_override / visual_lock_override:本集的美术圣经 / 视觉锁,非空时在本集取代剧级那段(出图、设定图、出视频都认)。'
+      + '只写画风与美术规则;角色外观的唯一真相源仍是人物档案(update_character),别写进这里。'
+      + '\n· video_style_prompt_override:本集出视频时的风格词。本集设了 style_override 而这一项为空时,'
+      + '**剧级视频风格词不会带进本集**(它是为剧级画风写的),需要就为本集单独写一段。'
+      + '\n★设完之后必须做的事(顺序别跳):① get_episode_style 看 missing_episode_sheets——剧级定妆图是按剧级画风出的,'
+      + '直接当参考会把本集画面拉回剧级画风,所以平台要求本集出镜角色先有**本集设定图**:对本集调 generate_character_sheets'
+      + '(收费,先把费用讲给客户);② 设定图齐了再 quote_frames / generate_frames。缺设定图时出帧回 400 episode_style.sheet_required 并点名角色,'
+      + '不扣费——补设定图,别重试。③ 已经出好的帧与视频不会自动重出:改画风前出的要客户决定是否重出(收费)。'
+      + '\n★本期范围:道具图、场景图、定妆图仍按剧级画风出。场景图若与本集画风差得远,在镜头正文与 art_bible_override 里把画风写明。'
+      + '\n★403 episode_style.gate_off = 这部剧尚未开通集级画风覆盖(不是调用姿势错了),别重试,告诉客户联系平台开通;'
+      + '此时 art_bible_override / visual_lock_override 仍可单独设置。400 提到「提示词预算」= 本集画风与这部剧的图片模型不兼容,'
+      + '按提示换模型或换画风档。',
+    {
+      episode_id: z.number().int().positive(),
+      style_override: z.string().max(200).nullable().optional()
+        .describe('本集画风档(标准档 key 优先;空串 / null = 清空,回退剧级)'),
+      video_style_prompt_override: z.string().max(2000).nullable().optional()
+        .describe('本集视频风格词(空串 / null = 清空)'),
+      art_bible_override: z.string().nullable().optional().describe('本集美术圣经(空串 / null = 清空,回退剧级)'),
+      visual_lock_override: z.string().nullable().optional().describe('本集视觉锁(空串 / null = 清空,回退剧级)'),
+    },
+    async ({ episode_id, ...body }) =>
+      jsonResult(await client.producePut(`/episodes/${episode_id}/style-override`, body)),
+  )
+  server.tool(
     'export_sheet_compare',
     '导出**设定图对照版**(角色设定图与成片画面的对照拼版,营销/交付用)。触发后台合成,用 get_sheet_compare 轮询。'
       + '\n★这个能力**默认关**:它是剧集级开关(不是所有片子都允许这样对外输出),'
@@ -3481,7 +3530,8 @@ export function registerProduceTools(server: McpServer, client: StarReelClient) 
     '还原某镜的**厂商原声**(免费、可逆、不重生视频):撤掉 revoice_narration 旁白换轨 / replace_shot_dialogue 对白重配或 mute_only 静音 / ' +
       'repair_episode_dialogue / unify_voices 写下的换轨产物,本镜回到原片(video_url)自带的原始音轨。换轨从不改写原片,所以随时可还原。' +
       '返回 status:restored=已还原;noop=本镜本来就没换轨/静音,无需操作;' +
-      '错误 original_audio_unavailable=原片视频为空、拿不到原声(换轨产物保留不动,要原声只能 regenerate_shot_video);' +
+      '错误 original_audio_unavailable=原片视频为空或文件已不存在、拿不到原声(换轨产物保留不动,要原声只能 regenerate_shot_video);' +
+      'original_audio_unverified(503)=暂时确认不了原片还能不能访问,本次没还原、库没动,稍后重试;' +
       'restore_conflict=还原时本镜正被另一次换轨写入,确认没有在跑的换轨后重试。' +
       '★lip_sync_still_active=true 表示本镜还有对口型产物,成片仍优先用对口型版。' +
       '★还原后用 compose_episode 重拼成片才生效(免费,会按原声重新对齐字幕);别用 rerender_episode——声音会回来,但本镜字幕只能按字数估算、和原声错位。之后 get_storyboards 的 effective_video_url 会回到 video_url。',
